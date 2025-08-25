@@ -44,6 +44,7 @@ import {
 } from 'react-icons/fa';
 import './App.css';
 import DocumentPreviewer from './components/DocumentPreviewer';
+import ApiService from './services/api';
 
 
 function App() {
@@ -52,6 +53,27 @@ function App() {
     password: ''
   });
   const [showChat, setShowChat] = useState(false);
+  const [loginError, setLoginError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState(null);
+
+  // Check if user is already logged in on component mount
+  React.useEffect(() => {
+    const isLoggedIn = localStorage.getItem('isLoggedIn');
+    const userData = localStorage.getItem('user');
+    
+    if (isLoggedIn === 'true' && userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+        setShowChat(true);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('user');
+      }
+    }
+  }, []);
   const [showSettings, setShowSettings] = useState(false);
   const [showPortal, setShowPortal] = useState(false);
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
@@ -112,8 +134,27 @@ function App() {
   const [currentChatId, setCurrentChatId] = useState(1);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [conversationStates, setConversationStates] = useState({});
 
-  const userName = 'Dhanshika';
+  const handleLogout = async () => {
+    try {
+      // Call logout API if available
+      await ApiService.logout();
+    } catch (error) {
+      console.error('Logout API error:', error);
+      // Continue with local logout even if API fails
+    }
+    
+    // Clear local storage and state
+    localStorage.removeItem('isLoggedIn');
+    localStorage.removeItem('user');
+    setUser(null);
+    setShowChat(false);
+    setFormData({ email: '', password: '' });
+    setLoginError('');
+  };
+
+  const userName = user ? `${user.first_name} ${user.last_name}` : 'User';
   const userInitial = userName.charAt(0).toUpperCase();
 
   // Helper function to format relative time
@@ -362,11 +403,27 @@ function App() {
     handleCloseOnboarding();
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Login attempt:', formData);
-    // Simulate successful login and show chat
-    setShowChat(true);
+    setLoginError('');
+    setIsLoading(true);
+    
+    try {
+      const data = await ApiService.login(formData.email, formData.password);
+      
+      console.log('Login successful:', data);
+      // Store user data in localStorage for persistence
+      localStorage.setItem('user', JSON.stringify(data.user));
+      localStorage.setItem('isLoggedIn', 'true');
+      // Set user state and show chat interface
+      setUser(data.user);
+      setShowChat(true);
+    } catch (error) {
+      console.error('Login error:', error);
+      setLoginError(error.message || 'Network error. Please check your connection and try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Chat management functions
@@ -387,6 +444,12 @@ function App() {
     // Deactivate all other chats
     const updatedChats = chats.map(chat => ({ ...chat, isActive: false }));
     updatedChats.push(newChat);
+    
+    // Initialize conversation state for new chat
+    setConversationStates(prev => ({
+      ...prev,
+      [newChatId]: {}
+    }));
     
     setChats(updatedChats);
     setCurrentChatId(newChatId);
@@ -435,9 +498,9 @@ function App() {
     setChats(updatedChats);
   };
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (inputMessage.trim() && currentChat) {
+    if (inputMessage.trim() && currentChat && user) {
       const newMessage = {
         id: currentChat.messages.length + 1,
         text: inputMessage,
@@ -606,7 +669,7 @@ function App() {
         return;
       }
       
-      // Update the current chat's messages
+      // Add user message to chat
       const updatedChats = chats.map(chat => {
         if (chat.id === currentChatId) {
           return {
@@ -624,15 +687,33 @@ function App() {
       // Show typing indicator
       setIsTyping(true);
       
-      // Simulate bot response
-      setTimeout(() => {
+      try {
+        // Get current conversation state for this chat
+        const currentConversationState = conversationStates[currentChatId] || {};
+        
+        // Call the chatbot API
+        const response = await ApiService.sendChatMessage(
+          user.user_id,
+          user.tag || 'client',
+          inputMessage,
+          currentConversationState
+        );
+        
+        // Update conversation state
+        setConversationStates(prev => ({
+          ...prev,
+          [currentChatId]: response.conversation_state || {}
+        }));
+        
+        // Create bot response
         const botResponse = {
           id: currentChat.messages.length + 2,
-          text: "I understand you said: " + inputMessage + ". This is a demo response. In a real application, this would be processed by an LLM model.",
+          text: response.response,
           isBot: true,
           timestamp: new Date()
         };
         
+        // Update chats with bot response
         const updatedChatsWithResponse = chats.map(chat => {
           if (chat.id === currentChatId) {
             return {
@@ -649,8 +730,36 @@ function App() {
         });
         
         setChats(updatedChatsWithResponse);
+        
+      } catch (error) {
+        console.error('Chatbot API error:', error);
+        
+        // Fallback response on error
+        const errorResponse = {
+          id: currentChat.messages.length + 2,
+          text: "I'm sorry, I'm having trouble connecting right now. Please try again later.",
+          isBot: true,
+          timestamp: new Date()
+        };
+        
+        const updatedChatsWithError = chats.map(chat => {
+          if (chat.id === currentChatId) {
+            return {
+              ...chat,
+              messages: [...chat.messages, newMessage, errorResponse]
+            };
+          } else {
+            return {
+              ...chat,
+              unreadCount: chat.unreadCount + 1
+            };
+          }
+        });
+        
+        setChats(updatedChatsWithError);
+      } finally {
         setIsTyping(false);
-      }, 1000);
+      }
     }
   };
 
@@ -889,11 +998,16 @@ function App() {
             <div className="user-avatar">{userInitial}</div>
             <div className="user-info">
               <div className="user-name">{userName}</div>
-              <div className="user-status">Online</div>
+              <div className="user-status">{user ? user.tag : 'Online'}</div>
             </div>
-            <button className="settings-btn" onClick={() => setShowSettings(true)}>
-              <FaCog />
-            </button>
+            <div className="user-actions">
+              <button className="settings-btn" onClick={() => setShowSettings(true)}>
+                <FaCog />
+              </button>
+              <button className="logout-btn" onClick={handleLogout} title="Logout">
+                <FaSignOutAlt />
+              </button>
+            </div>
           </div>
         </div>
         
@@ -1041,7 +1155,7 @@ function App() {
                 <div className="portal-user-info">
                   <div className="user-details">
                     <span className="user-greeting">Hi! {userName}</span>
-                    <span className="user-role">CSA</span>
+                    <span className="user-role">{user ? user.tag : 'User'}</span>
                   </div>
                   <div className="user-avatar">{userInitial}</div>
                 </div>
@@ -1694,6 +1808,12 @@ function App() {
           </div>
           
           <form className="login-form" onSubmit={handleSubmit}>
+            {loginError && (
+              <div className="error-message">
+                {loginError}
+              </div>
+            )}
+            
             <div className="form-group">
               <label htmlFor="email" className="form-label">Email</label>
               <input
@@ -1705,6 +1825,7 @@ function App() {
                 className="form-input"
                 placeholder="Enter your email"
                 required
+                disabled={isLoading}
               />
             </div>
 
@@ -1719,20 +1840,21 @@ function App() {
                 className="form-input"
                 placeholder="Enter your password"
                 required
+                disabled={isLoading}
               />
             </div>
 
             <div className="form-options">
               <label className="checkbox-container">
-                <input type="checkbox" className="checkbox" />
+                <input type="checkbox" className="checkbox" disabled={isLoading} />
                 <span className="checkmark"></span>
                 Remember me
               </label>
               <a href="#" className="forgot-password">Forgot password?</a>
             </div>
 
-            <button type="submit" className="login-button">
-              Sign In
+            <button type="submit" className="login-button" disabled={isLoading}>
+              {isLoading ? 'Signing In...' : 'Sign In'}
             </button>
           </form>
 
