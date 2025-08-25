@@ -44,7 +44,10 @@ import {
 } from 'react-icons/fa';
 import './App.css';
 import DocumentPreviewer from './components/DocumentPreviewer';
+<<<<<<< HEAD
 import MarkdownRenderer from './components/MarkdownRenderer';
+=======
+>>>>>>> 86d6b4dc908addf0a65b98efe59b073820fcfe13
 import ApiService from './services/api';
 
 
@@ -1048,6 +1051,7 @@ function App() {
                         <FaDownload /> Download SOW
                       </button>
                     </div>
+<<<<<<< HEAD
                                      ) : (
                      <div className={`message-text ${message.isProcessing ? 'processing' : ''}`}>
                        {message.isBot ? (
@@ -1057,6 +1061,13 @@ function App() {
                        )}
                      </div>
                    )}
+=======
+                  ) : (
+                    <div className={`message-text ${message.isProcessing ? 'processing' : ''}`}>
+                      {message.text}
+                    </div>
+                  )}
+>>>>>>> 86d6b4dc908addf0a65b98efe59b073820fcfe13
                   <div className="message-time">
                     {formatRelativeTime(message.timestamp)}
                   </div>
