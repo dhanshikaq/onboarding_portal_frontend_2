@@ -44,10 +44,6 @@ import {
 } from 'react-icons/fa';
 import './App.css';
 import DocumentPreviewer from './components/DocumentPreviewer';
-<<<<<<< HEAD
-import MarkdownRenderer from './components/MarkdownRenderer';
-=======
->>>>>>> 86d6b4dc908addf0a65b98efe59b073820fcfe13
 import ApiService from './services/api';
 
 
@@ -364,6 +360,14 @@ function App() {
       if (!onboardingData.startDate) {
         errors.startDate = 'Start date is required';
       }
+      // Validate that end date is after start date if provided
+      if (onboardingData.endDate && onboardingData.startDate) {
+        const startDate = new Date(onboardingData.startDate);
+        const endDate = new Date(onboardingData.endDate);
+        if (endDate <= startDate) {
+          errors.endDate = 'End date must be after start date';
+        }
+      }
     }
     
     setValidationErrors(errors);
@@ -401,10 +405,108 @@ function App() {
     });
   };
 
-  const handleOnboardingSubmit = (e) => {
+  const handleOnboardingSubmit = async (e) => {
     e.preventDefault();
-    console.log('Client onboarding completed:', onboardingData);
-    handleCloseOnboarding();
+    setIsLoading(true);
+    
+    try {
+      // Prepare project data according to the API specification
+      const projectData = {
+        company: {
+          company_name: onboardingData.company,
+          sector: onboardingData.companyIndustry
+        },
+        project: {
+          project_name: onboardingData.projectName,
+          start_date: onboardingData.startDate,
+          end_date: onboardingData.endDate || null,
+          domain: onboardingData.projectDomain || null
+        },
+        user_assignments: [
+          // Add current user as default assignment
+          {
+            user_id: user?.user_id || 'current_user',
+            role: user?.tag || 'client'
+          }
+          // Additional user assignments can be added here based on the form data
+        ]
+      };
+
+      // Call the API to create the project
+      const response = await ApiService.createProject(projectData);
+      
+      console.log('Project created successfully:', response);
+      
+      // Create a new project object for the UI
+      const newProject = {
+        id: response.data.project_id,
+        title: onboardingData.projectName,
+        description: `${onboardingData.projectName} project for ${onboardingData.company}`,
+        status: 'New',
+        projectId: `PROJ-${String(response.data.project_id).padStart(6, '0')}`,
+        startDate: onboardingData.startDate,
+        endDate: onboardingData.endDate || 'TBD',
+        domain: onboardingData.projectDomain || 'General',
+        company: onboardingData.company,
+        csaMembers: [],
+        quadrantTeam: [],
+        clientMembers: [],
+        timeline: [
+          {
+            id: 1,
+            phase: 'Project Initiation',
+            status: 'completed',
+            documents: []
+          },
+          {
+            id: 2,
+            phase: 'Requirements Gathering',
+            status: 'pending',
+            documents: []
+          },
+          {
+            id: 3,
+            phase: 'Design & Architecture',
+            status: 'pending',
+            documents: []
+          },
+          {
+            id: 4,
+            phase: 'Development',
+            status: 'pending',
+            documents: []
+          },
+          {
+            id: 5,
+            phase: 'Testing & QA',
+            status: 'pending',
+            documents: []
+          },
+          {
+            id: 6,
+            phase: 'Deployment',
+            status: 'pending',
+            documents: []
+          }
+        ]
+      };
+
+      // Add the new project to the projects list
+      setProjects(prevProjects => [newProject, ...prevProjects]);
+      
+      // Set this as the selected project
+      setSelectedProject(newProject);
+      
+      // Show success message
+      alert(`Project "${onboardingData.projectName}" created successfully!`);
+      
+      handleCloseOnboarding();
+    } catch (error) {
+      console.error('Project creation error:', error);
+      alert(`Failed to create project: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -521,7 +623,7 @@ function App() {
         // This is the Quadra prompt - implement the flow directly in main chat
         
         // Create project in the portal
-        const newProject = createProjectFromQuadraPrompt(inputMessage);
+        const newProject = await createProjectFromQuadraPrompt(inputMessage);
         
         // Add user message to chat
         const updatedChats = chats.map(chat => {
@@ -781,7 +883,7 @@ function App() {
     document.body.removeChild(a);
   };
 
-  const createProjectFromQuadraPrompt = (promptText) => {
+  const createProjectFromQuadraPrompt = async (promptText) => {
     // Extract project details from the Quadra prompt
     const projectName = "Agentic AI Platform";
     const company = "Client Company"; // Default company name
@@ -796,8 +898,46 @@ function App() {
     const csaEmails = emails.filter(email => email.includes('microsft.com'));
     const clientEmails = emails.filter(email => !email.includes('quadranttechnologies.com') && !email.includes('microsft.com'));
     
-    // Create team members from emails
-    const createTeamMember = (email, role, teamType) => ({
+    try {
+      // Prepare project data for API
+      const projectData = {
+        company: {
+          company_name: company,
+          sector: "Technology"
+        },
+        project: {
+          project_name: projectName,
+          start_date: new Date().toISOString().split('T')[0],
+          end_date: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 6 months from now
+          domain: domain
+        },
+        user_assignments: [
+          // Add current user
+          {
+            user_id: user?.user_id || 'current_user',
+            role: user?.tag || 'client'
+          },
+          // Add extracted emails as user assignments
+          ...quadrantEmails.map(email => ({
+            user_id: email, // Using email as user_id for now
+            role: 'quadrant_team'
+          })),
+          ...csaEmails.map(email => ({
+            user_id: email,
+            role: 'csa'
+          })),
+          ...clientEmails.map(email => ({
+            user_id: email,
+            role: 'client'
+          }))
+        ]
+      };
+
+      // Call the API to create the project
+      const response = await ApiService.createProject(projectData);
+      
+      // Create team members from emails for UI display
+      const createTeamMember = (email, role, teamType) => ({
       id: Date.now() + Math.random(),
       name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
       role: role,
@@ -878,11 +1018,95 @@ function App() {
     // Set this as the selected project
     setSelectedProject(newProject);
     
-    // Show success message
-    console.log('Project created successfully:', newProject);
-    
-    return newProject;
-  };
+         // Show success message
+     console.log('Project created successfully via API:', response);
+     
+     return newProject;
+   } catch (error) {
+     console.error('Failed to create project via API:', error);
+     
+     // Fallback: create project locally if API fails
+     const createTeamMember = (email, role, teamType) => ({
+       id: Date.now() + Math.random(),
+       name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+       role: role,
+       email: email,
+       avatar: email.split('@')[0].substring(0, 2).toUpperCase()
+     });
+     
+     const csaMembers = csaEmails.map(email => createTeamMember(email, 'CSA Member', 'csa'));
+     const quadrantTeam = quadrantEmails.map(email => createTeamMember(email, 'Quadrant Team Member', 'quadrant'));
+     const clientMembers = clientEmails.map(email => createTeamMember(email, 'Client Member', 'client'));
+     
+     const fallbackProject = {
+       id: Date.now(),
+       title: projectName,
+       description: `${projectName} project for ${company}`,
+       status: 'New',
+       projectId: `PROJ-${String(Date.now()).slice(-6)}`,
+       startDate: new Date().toISOString().split('T')[0],
+       endDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+       domain: domain,
+       company: company,
+       csaMembers: csaMembers,
+       quadrantTeam: quadrantTeam,
+       clientMembers: clientMembers,
+       timeline: [
+         {
+           id: 1,
+           phase: 'Project Initiation',
+           status: 'completed',
+           documents: [
+             { 
+               id: 1, 
+               name: 'SOW_Agentic_AI_Platform.pdf', 
+               type: 'pdf', 
+               size: '150 KB', 
+               uploadedBy: 'Quadra AI', 
+               uploadedAt: new Date().toISOString().split('T')[0] 
+             }
+           ]
+         },
+         {
+           id: 2,
+           phase: 'Requirements Gathering',
+           status: 'pending',
+           documents: []
+         },
+         {
+           id: 3,
+           phase: 'Design & Architecture',
+           status: 'pending',
+           documents: []
+         },
+         {
+           id: 4,
+           phase: 'Development',
+           status: 'pending',
+           documents: []
+         },
+         {
+           id: 5,
+           phase: 'Testing & QA',
+           status: 'pending',
+           documents: []
+         },
+         {
+           id: 6,
+           phase: 'Deployment',
+           status: 'pending',
+           documents: []
+         }
+       ]
+     };
+     
+     setProjects(prevProjects => [fallbackProject, ...prevProjects]);
+     setSelectedProject(fallbackProject);
+     
+     console.log('Project created locally (API failed):', fallbackProject);
+     return fallbackProject;
+   }
+ };
 
   const handleNewProjectSubmit = (e) => {
     e.preventDefault();
@@ -1051,23 +1275,11 @@ function App() {
                         <FaDownload /> Download SOW
                       </button>
                     </div>
-<<<<<<< HEAD
-                                     ) : (
-                     <div className={`message-text ${message.isProcessing ? 'processing' : ''}`}>
-                       {message.isBot ? (
-                         <MarkdownRenderer text={message.text} />
-                       ) : (
-                         message.text
-                       )}
-                     </div>
-                   )}
-=======
                   ) : (
                     <div className={`message-text ${message.isProcessing ? 'processing' : ''}`}>
                       {message.text}
                     </div>
                   )}
->>>>>>> 86d6b4dc908addf0a65b98efe59b073820fcfe13
                   <div className="message-time">
                     {formatRelativeTime(message.timestamp)}
                   </div>
@@ -1554,6 +1766,9 @@ function App() {
                               value={onboardingData.endDate}
                               onChange={handleOnboardingChange}
                             />
+                            {validationErrors.endDate && (
+                              <div className="error-message">{validationErrors.endDate}</div>
+                            )}
                           </div>
                           
                           <div className="form-group">
@@ -1710,8 +1925,9 @@ function App() {
                             type="button" 
                             className="btn-primary"
                             onClick={handleOnboardingSubmit}
+                            disabled={isLoading}
                           >
-                            Complete Onboarding
+                            {isLoading ? 'Creating Project...' : 'Complete Onboarding'}
                           </button>
                         </div>
                       </div>
