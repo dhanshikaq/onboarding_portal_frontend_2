@@ -74,6 +74,13 @@ function App() {
       }
     }
   }, []);
+
+  // Load user sessions when user is available
+  React.useEffect(() => {
+    if (user?.user_id) {
+      loadUserSessions();
+    }
+  }, [user?.user_id]);
   const [showSettings, setShowSettings] = useState(false);
   const [showPortal, setShowPortal] = useState(false);
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
@@ -135,6 +142,10 @@ function App() {
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [conversationStates, setConversationStates] = useState({});
+  const [sessionIds, setSessionIds] = useState({}); // Track session IDs for each chat - used to maintain conversation continuity
+  const [projectIds, setProjectIds] = useState({}); // Track project IDs for each chat - used to link conversations to projects
+  const [userSessions, setUserSessions] = useState([]); // Store user sessions from API
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false); // Loading state for sessions
 
   const handleLogout = async () => {
     try {
@@ -166,6 +177,54 @@ function App() {
     if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
     return `${Math.floor(diffInMinutes / 1440)}d ago`;
+  };
+
+  // Helper function to parse conversation context into messages
+  const parseConversationContext = (context) => {
+    if (!context) return [];
+    
+    const messages = [];
+    const lines = context.split('\n');
+    let currentMessage = null;
+    let messageId = 1;
+    
+    for (const line of lines) {
+      if (line.startsWith('user: ')) {
+        // Save previous message if exists
+        if (currentMessage) {
+          messages.push(currentMessage);
+        }
+        // Start new user message
+        currentMessage = {
+          id: messageId++,
+          text: line.substring(6), // Remove 'user: ' prefix
+          isBot: false,
+          timestamp: new Date() // We don't have exact timestamps, so use current time
+        };
+      } else if (line.startsWith('bot: ')) {
+        // Save previous message if exists
+        if (currentMessage) {
+          messages.push(currentMessage);
+        }
+        // Start new bot message
+        currentMessage = {
+          id: messageId++,
+          text: line.substring(5), // Remove 'bot: ' prefix
+          isBot: true,
+          timestamp: new Date() // We don't have exact timestamps, so use current time
+        };
+      } else if (currentMessage && line.trim()) {
+        // Continue previous message (multi-line)
+        currentMessage.text += '\n' + line;
+      }
+    }
+    
+    // Add the last message if exists
+    if (currentMessage) {
+      messages.push(currentMessage);
+    }
+    
+    return messages;
   };
 
   // Get current chat data
@@ -557,6 +616,18 @@ function App() {
       [newChatId]: {}
     }));
     
+    // Initialize session_id as null for new chat
+    setSessionIds(prev => ({
+      ...prev,
+      [newChatId]: null
+    }));
+    
+    // Initialize project_id as null for new chat
+    setProjectIds(prev => ({
+      ...prev,
+      [newChatId]: null
+    }));
+    
     setChats(updatedChats);
     setCurrentChatId(newChatId);
     setInputMessage('');
@@ -587,6 +658,160 @@ function App() {
     setInputMessage('');
   };
 
+  const linkChatToProject = (chatId, projectId) => {
+    setProjectIds(prev => ({
+      ...prev,
+      [chatId]: projectId
+    }));
+    console.log(`Linked chat ${chatId} to project ${projectId}`);
+  };
+
+  const loadUserSessions = async (options = {}) => {
+    if (!user?.user_id) return;
+    
+    setIsLoadingSessions(true);
+    try {
+      const response = await ApiService.getUserSessions(user.user_id, options);
+      const sessions = response.sessions || [];
+      setUserSessions(sessions);
+
+      
+      // Clean up stale session mappings
+      const validSessionIds = sessions.map(s => s.session_id);
+      setSessionIds(prev => {
+        const cleaned = {};
+        Object.entries(prev).forEach(([chatId, sessionId]) => {
+                    if (validSessionIds.includes(sessionId)) {
+            cleaned[chatId] = sessionId;
+          }
+        });
+        return cleaned;
+      });
+    } catch (error) {
+      console.error('Failed to load user sessions:', error);
+      // Don't show error to user for now, just log it
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  };
+
+  const handleSessionClick = async (session) => {
+    // Check if there's already a chat with this session_id
+    const existingChatId = Object.keys(sessionIds).find(chatId => 
+      sessionIds[chatId] === session.session_id
+    );
+
+    if (existingChatId) {
+      // If chat exists, switch to it
+      console.log(`Switching to existing chat ${existingChatId} for session ${session.session_id}`);
+      switchChat(parseInt(existingChatId));
+    } else {
+      // Create a new chat for this session and load conversation history
+      const newChatId = Math.max(...chats.map(chat => chat.id)) + 1;
+      
+      // Create initial chat structure
+      const newChat = {
+        id: newChatId,
+        name: session.project_name || `Session ${session.session_id}`,
+        preview: `${session.message_count} messages`,
+        avatar: String.fromCharCode(65 + (newChatId - 1) % 26), // A, B, C, etc.
+        messages: [
+          { id: 1, text: "Loading conversation history...", isBot: true, timestamp: new Date() }
+        ],
+        isActive: false,
+        unreadCount: 0
+      };
+      
+      // Deactivate all other chats
+      const updatedChats = chats.map(chat => ({ ...chat, isActive: false }));
+      updatedChats.push(newChat);
+      
+      // Initialize conversation state for new chat
+      setConversationStates(prev => ({
+        ...prev,
+        [newChatId]: {}
+      }));
+      
+      // Set session_id for the new chat - MAP LOCAL CHAT ID TO REAL SESSION ID
+      // This creates the mapping: localChatId -> realSessionId
+      // Example: { 10: 8, 11: 9 } means local chat 10 maps to session 8, local chat 11 maps to session 9
+      setSessionIds(prev => ({
+        ...prev,
+        [newChatId]: session.session_id
+      }));
+      
+      // Set project_id if available
+      if (session.project_id) {
+        setProjectIds(prev => ({
+          ...prev,
+          [newChatId]: session.project_id
+        }));
+      }
+      
+      setChats(updatedChats);
+      setCurrentChatId(newChatId);
+      setInputMessage('');
+      
+      // Fetch conversation history for this session using the REAL session ID
+      try {
+        const response = await ApiService.getSessionConversation(session.session_id);
+        
+        if (response.success && response.session) {
+          // Parse the conversation context into individual messages
+          const conversationMessages = parseConversationContext(response.session.context);
+          
+          // Update the chat with the actual conversation history
+          setChats(prevChats => {
+            return prevChats.map(chat => {
+              if (chat.id === newChatId) {
+                return {
+                  ...chat,
+                  messages: conversationMessages.length > 0 ? conversationMessages : [
+                    { id: 1, text: "Hello! I'm your AI assistant. How can I help you today?", isBot: true, timestamp: new Date() }
+                  ],
+                  preview: conversationMessages.length > 0 
+                    ? `${conversationMessages.length} messages` 
+                    : 'Start a new conversation'
+                };
+              }
+              return chat;
+            });
+          });
+          
+
+        }
+      } catch (error) {
+        console.error('Failed to load conversation history:', error);
+        
+        // Handle 404 errors specifically - session doesn't exist on backend
+        if (error.message.includes('404') || error.message.includes('Not Found')) {
+          console.warn(`Session ${session.session_id} not found on backend - this might be a stale session`);
+          
+          // Update the chat to show a warning message
+          setChats(prevChats => {
+            return prevChats.map(chat => {
+              if (chat.id === newChatId) {
+                return {
+                  ...chat,
+                  messages: [
+                    { 
+                      id: 1, 
+                      text: "This session appears to be no longer available on the server. Starting a new conversation.", 
+                      isBot: true, 
+                      timestamp: new Date() 
+                    }
+                  ],
+                  preview: 'Session not found - new conversation'
+                };
+              }
+              return chat;
+            });
+          });
+        }
+      }
+    }
+  };
+
   const deleteChat = (chatId) => {
     if (chats.length <= 1) {
       alert('Cannot delete the last chat. At least one chat must remain.');
@@ -594,6 +819,25 @@ function App() {
     }
     
     const updatedChats = chats.filter(chat => chat.id !== chatId);
+    
+    // Clean up session_id, project_id and conversation state for deleted chat
+    setSessionIds(prev => {
+      const newSessionIds = { ...prev };
+      delete newSessionIds[chatId];
+      return newSessionIds;
+    });
+    
+    setProjectIds(prev => {
+      const newProjectIds = { ...prev };
+      delete newProjectIds[chatId];
+      return newProjectIds;
+    });
+    
+    setConversationStates(prev => {
+      const newConversationStates = { ...prev };
+      delete newConversationStates[chatId];
+      return newConversationStates;
+    });
     
     // If we're deleting the current chat, switch to the first available chat
     if (chatId === currentChatId) {
@@ -797,12 +1041,22 @@ function App() {
         // Get current conversation state for this chat
         const currentConversationState = conversationStates[currentChatId] || {};
         
+        // Get current session ID for this chat (null for new chats, actual ID for existing sessions)
+        const currentSessionId = sessionIds[currentChatId];
+        
+        // Get current project ID for this chat (null if not linked to a project)
+        const currentProjectId = projectIds[currentChatId];
+        
+
+        
         // Call the chatbot API
         const response = await ApiService.sendChatMessage(
           user.user_id,
           user.tag || 'client',
           inputMessage,
-          currentConversationState
+          currentConversationState,
+          currentSessionId,
+          currentProjectId
         );
         
         // Update conversation state
@@ -810,6 +1064,17 @@ function App() {
           ...prev,
           [currentChatId]: response.conversation_state || {}
         }));
+        
+        // Store session_id if provided in response
+        if (response.session_id) {
+          setSessionIds(prev => ({
+            ...prev,
+            [currentChatId]: response.session_id
+          }));
+          
+          // Refresh user sessions to get updated session data
+          loadUserSessions();
+        }
         
         // Create bot response
         const botResponse = {
@@ -1332,27 +1597,68 @@ function App() {
         
         {/* Right Sidebar */}
         <div className="chat-right-sidebar">
-          <div className="sidebar-section">
-            <h3 className="section-title">Quick Actions</h3>
-            <div className="quick-actions-list">
-              <div className="quick-action-item" onClick={() => setShowPortal(true)}>
-                <span className="action-icon"><FaSignOutAlt /></span>
-                <span className="action-text">Take me to portal</span>
-              </div>
-              <div className="quick-action-item">
-                <span className="action-icon"><FaClipboardList /></span>
-                <span className="action-text">Current projects</span>
-              </div>
-              <div className="quick-action-item">
-                <span className="action-icon"><FaFolder /></span>
-                <span className="action-text">Projects archive</span>
-              </div>
-              <div className="quick-action-item">
-                <span className="action-icon"><FaChartBar /></span>
-                <span className="action-text">Dashboard</span>
-              </div>
-            </div>
-          </div>
+                     <div className="sidebar-section">
+             <h3 className="section-title">Quick Actions</h3>
+             <div className="quick-actions-list">
+               <div className="quick-action-item" onClick={() => setShowPortal(true)}>
+                 <span className="action-icon"><FaSignOutAlt /></span>
+                 <span className="action-text">Take me to portal</span>
+               </div>
+               <div className="quick-action-item">
+                 <span className="action-icon"><FaClipboardList /></span>
+                 <span className="action-text">Current projects</span>
+               </div>
+               <div className="quick-action-item">
+                 <span className="action-icon"><FaFolder /></span>
+                 <span className="action-text">Projects archive</span>
+               </div>
+               <div className="quick-action-item">
+                 <span className="action-icon"><FaChartBar /></span>
+                 <span className="action-text">Dashboard</span>
+               </div>
+             </div>
+           </div>
+
+           <div className="sidebar-section">
+             <h3 className="section-title">Recent Sessions</h3>
+             {isLoadingSessions ? (
+               <div className="sessions-loading">
+                 <span>Loading sessions...</span>
+               </div>
+             ) : userSessions.length > 0 ? (
+               <div className="sessions-list">
+                 {userSessions.slice(0, 5).map((session) => (
+                   <div 
+                     key={session.session_id} 
+                     className="session-item"
+                     onClick={() => handleSessionClick(session)}
+                   >
+                     <div className="session-header">
+                       <span className="session-project">{session.project_name}</span>
+                       <span className={`session-status ${session.is_active ? 'active' : 'inactive'}`}>
+                         {session.is_active ? 'Active' : 'Inactive'}
+                       </span>
+                     </div>
+                     <div className="session-details">
+                       <span className="session-messages">{session.message_count} messages</span>
+                       <span className="session-time">
+                         {formatRelativeTime(new Date(session.last_activity))}
+                       </span>
+                     </div>
+                   </div>
+                 ))}
+                 {userSessions.length > 5 && (
+                   <div className="sessions-more">
+                     <span>+{userSessions.length - 5} more sessions</span>
+                   </div>
+                 )}
+               </div>
+             ) : (
+               <div className="sessions-empty">
+                 <span>No recent sessions</span>
+               </div>
+             )}
+           </div>
           
           <div className="floating-actions">
             <button className="floating-btn"><FaFolderOpen /></button>
