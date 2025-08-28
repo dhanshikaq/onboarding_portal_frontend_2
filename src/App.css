@@ -257,6 +257,57 @@ body {
   color: #ffffff;
 }
 
+/* Sidebar Toggle Buttons */
+.sidebar-toggle {
+  position: fixed;
+  z-index: 1000;
+  background: rgba(28, 28, 30, 0.95);
+  border: 1px solid #38383a;
+  color: #ffffff;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.sidebar-toggle:hover {
+  background: rgba(44, 44, 46, 0.95);
+  border-color: #007AFF;
+  transform: scale(1.05);
+}
+
+/* Left sidebar toggle button positioning - on left pane edge, middle */
+.left-sidebar-toggle {
+  left: 340px;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: left 0.3s ease;
+}
+
+/* Right sidebar toggle button positioning - on right pane edge, middle */
+.right-sidebar-toggle {
+  right: 320px;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: right 0.3s ease;
+}
+
+/* When left sidebar is closed, move left arrow to leftmost edge */
+.left-sidebar-toggle.closed {
+  left: 20px;
+}
+
+/* When right sidebar is closed, move right arrow to rightmost edge */
+.right-sidebar-toggle.closed {
+  right: 20px;
+}
+
 /* Left Sidebar */
 .chat-sidebar {
   width: 320px;
@@ -267,6 +318,12 @@ body {
   padding: 24px 0;
   box-shadow: 2px 0 20px rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(20px);
+  position: relative;
+  transition: transform 0.3s ease;
+}
+
+.chat-sidebar.closed {
+  display: none;
 }
 
 .sidebar-header {
@@ -308,6 +365,11 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.chat-counter-section {
+  padding: 16px 24px 8px 24px;
+  border-bottom: 1px solid #38383a;
+}
+
 .sidebar-header .logo-section {
   display: flex;
   flex-direction: column;
@@ -318,9 +380,9 @@ body {
 }
 
 .sidebar-header .company-logo {
-  width: 80px;
+  width: 180px;
   height: auto;
-  margin-bottom: 4px;
+  margin-bottom: 12px;
 }
 
 .logo-icon {
@@ -340,7 +402,7 @@ body {
 }
 
 .sidebar-header .logo-text {
-  font-size: 24px;
+  font-size: 48px;
   font-weight: 700;
   background: linear-gradient(135deg, #007AFF, #5856D6, #FF2D92);
   -webkit-background-clip: text;
@@ -677,6 +739,24 @@ body {
   display: flex;
   flex-direction: column;
   background: rgba(28, 28, 30, 0.95);
+  transition: all 0.3s ease;
+  min-width: 0;
+  width: 100%;
+}
+
+/* Ensure chat area expands to fill available space */
+.chat-app .chat-main {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Handle different sidebar combinations */
+.chat-app .chat-sidebar.closed ~ .chat-main {
+  margin-left: 0;
+}
+
+.chat-app .chat-right-sidebar.closed ~ .chat-main {
+  margin-right: 0;
 }
 
 .chat-header {
@@ -761,6 +841,36 @@ body {
   flex-direction: column;
   gap: 24px;
   background: #0a0a0a;
+}
+
+.no-chat-selected {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  color: #8e8e93;
+}
+
+.no-chat-icon {
+  font-size: 64px;
+  margin-bottom: 24px;
+  opacity: 0.7;
+}
+
+.no-chat-selected h3 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 12px;
+}
+
+.no-chat-selected p {
+  font-size: 16px;
+  color: #8e8e93;
+  max-width: 400px;
+  line-height: 1.5;
 }
 
 .message {
@@ -978,6 +1088,12 @@ body {
   padding: 24px 0;
   box-shadow: -2px 0 20px rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(20px);
+  position: relative;
+  transition: transform 0.3s ease;
+}
+
+.chat-right-sidebar.closed {
+  display: none;
 }
 
 .sidebar-section {
@@ -1501,8 +1617,8 @@ body {
 }
 
 .portal-title {
-  font-size: 32px;
-  font-weight: 600;
+  font-size: 48px;
+  font-weight: 700;
   color: #ffffff;
   margin: 0;
   letter-spacing: -0.5px;
@@ -1510,10 +1626,10 @@ body {
 }
 
 .portal-subtitle {
-  font-size: 16px;
+  font-size: 24px;
   color: #8e8e93;
   margin: 0;
-  font-weight: 400;
+  font-weight: 500;
   line-height: 1.4;
 }
 
@@ -1531,16 +1647,16 @@ body {
 }
 
 .user-greeting {
-  font-size: 16px;
-  font-weight: 500;
+  font-size: 24px;
+  font-weight: 600;
   color: #ffffff;
 }
 
 .user-role {
-  font-size: 14px;
+  font-size: 18px;
   color: #8e8e93;
   background: rgba(0, 122, 255, 0.1);
-  padding: 4px 12px;
+  padding: 6px 16px;
   border-radius: 12px;
   border: 1px solid rgba(0, 122, 255, 0.2);
 }
@@ -1584,8 +1700,8 @@ body {
 }
 
 .pane-title {
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 32px;
+  font-weight: 700;
   color: #ffffff;
   margin: 0;
   letter-spacing: -0.3px;

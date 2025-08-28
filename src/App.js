@@ -44,10 +44,7 @@ import {
 } from 'react-icons/fa';
 import './App.css';
 import DocumentPreviewer from './components/DocumentPreviewer';
-<<<<<<< HEAD
 import MarkdownRenderer from './components/MarkdownRenderer';
-=======
->>>>>>> 86d6b4dc908addf0a65b98efe59b073820fcfe13
 import ApiService from './services/api';
 
 
@@ -83,6 +80,8 @@ function App() {
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
   const [showDocumentPreviewer, setShowDocumentPreviewer] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
 
   const [selectedProject, setSelectedProject] = useState(null);
   const [onboardingStep, setOnboardingStep] = useState(1);
@@ -431,6 +430,14 @@ function App() {
   };
 
   // Chat management functions
+  const toggleLeftSidebar = () => {
+    setLeftSidebarOpen(!leftSidebarOpen);
+  };
+
+  const toggleRightSidebar = () => {
+    setRightSidebarOpen(!rightSidebarOpen);
+  };
+
   const createNewChat = () => {
     const newChatId = Math.max(...chats.map(chat => chat.id)) + 1;
     const newChat = {
@@ -908,8 +915,17 @@ function App() {
   if (showChat) {
     return (
       <div className="chat-app">
+        {/* Left Sidebar Toggle Button - positioned on left screen edge */}
+        <button 
+          className={`sidebar-toggle left-sidebar-toggle ${!leftSidebarOpen ? 'closed' : ''}`}
+          onClick={toggleLeftSidebar}
+          title={leftSidebarOpen ? 'Close left sidebar' : 'Open left sidebar'}
+        >
+          {leftSidebarOpen ? <FaArrowLeft /> : <FaArrowLeft style={{transform: 'rotate(180deg)'}} />}
+        </button>
+        
         {/* Left Sidebar */}
-        <div className="chat-sidebar">
+        <div className={`chat-sidebar ${leftSidebarOpen ? 'open' : 'closed'}`}>
           <div className="sidebar-header">
             <div className="logo-section">
               <img 
@@ -921,9 +937,6 @@ function App() {
                 }}
               />
               <span className="logo-text">Quadra</span>
-            </div>
-            <div className="chat-counter">
-              {chats.length} {chats.length === 1 ? 'chat' : 'chats'}
             </div>
           </div>
           
@@ -947,6 +960,12 @@ function App() {
             <div className="search-container">
               <span className="search-icon"><FaSearch /></span>
               <input type="text" placeholder="Search chats..." className="search-input" />
+            </div>
+          </div>
+          
+          <div className="chat-counter-section">
+            <div className="chat-counter">
+              {chats.length} {chats.length === 1 ? 'chat' : 'chats'}
             </div>
           </div>
           
@@ -1031,7 +1050,15 @@ function App() {
           </div>
           
           <div className="chat-messages">
-            {messages.map((message) => (
+            {messages.length === 0 ? (
+              <div className="no-chat-selected">
+                <div className="no-chat-icon">💬</div>
+                <h3>Welcome to Quadra Chat!</h3>
+                <p>Select a chat from the sidebar or start a new conversation to begin chatting.</p>
+              </div>
+            ) : (
+              <>
+                {messages.map((message) => (
               <div key={message.id} className={`message ${message.isBot ? 'bot' : 'user'}`}>
                 <div className="message-avatar">
                   {message.isBot ? 'Q' : userInitial}
@@ -1051,33 +1078,27 @@ function App() {
                         <FaDownload /> Download SOW
                       </button>
                     </div>
-<<<<<<< HEAD
-                                     ) : (
-                     <div className={`message-text ${message.isProcessing ? 'processing' : ''}`}>
-                       {message.isBot ? (
-                         <MarkdownRenderer text={message.text} />
-                       ) : (
-                         message.text
-                       )}
-                     </div>
-                   )}
-=======
                   ) : (
                     <div className={`message-text ${message.isProcessing ? 'processing' : ''}`}>
-                      {message.text}
+                      {message.isBot ? (
+                        <MarkdownRenderer text={message.text} />
+                      ) : (
+                        message.text
+                      )}
                     </div>
                   )}
->>>>>>> 86d6b4dc908addf0a65b98efe59b073820fcfe13
                   <div className="message-time">
                     {formatRelativeTime(message.timestamp)}
                   </div>
                 </div>
               </div>
-            ))}
-            {isTyping && (
-              <div className="typing-indicator">
-                <FaPaperPlane />
-              </div>
+                ))}
+                {isTyping && (
+                  <div className="typing-indicator">
+                    <FaPaperPlane />
+                  </div>
+                )}
+              </>
             )}
           </div>
           
@@ -1118,8 +1139,17 @@ function App() {
           />
         )}
         
+        {/* Right Sidebar Toggle Button - positioned on right screen edge */}
+        <button 
+          className={`sidebar-toggle right-sidebar-toggle ${!rightSidebarOpen ? 'closed' : ''}`}
+          onClick={toggleRightSidebar}
+          title={rightSidebarOpen ? 'Close right sidebar' : 'Open right sidebar'}
+        >
+          {rightSidebarOpen ? <FaArrowLeft style={{transform: 'rotate(180deg)'}} /> : <FaArrowLeft />}
+        </button>
+        
         {/* Right Sidebar */}
-        <div className="chat-right-sidebar">
+        <div className={`chat-right-sidebar ${rightSidebarOpen ? 'open' : 'closed'}`}>
           <div className="sidebar-section">
             <h3 className="section-title">Quick Actions</h3>
             <div className="quick-actions-list">
