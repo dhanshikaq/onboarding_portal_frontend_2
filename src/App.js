@@ -1,29 +1,20 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { 
+  FaPlus,
   FaPlusCircle,
   FaArchive,
-  FaHistory,
-  FaSearch, 
   FaEllipsisH, 
   FaPaperclip, 
-  FaLink, 
-  FaImage, 
   FaMicrophone, 
-  FaCamera, 
   FaPaperPlane, 
   FaSignOutAlt, 
   FaClipboardList, 
   FaFolder, 
   FaChartBar, 
   FaFolderOpen, 
-  FaMapMarkerAlt, 
-  FaCameraRetro,
   FaCog,
   FaArrowLeft,
-  FaUser,
   FaBuilding,
-  FaCalendarAlt,
-  FaCheckCircle,
   FaClock,
   FaTimes,
   FaChevronDown,
@@ -35,12 +26,11 @@ import {
   FaCalendarCheck,
   FaFileContract,
   FaHandshake,
-  FaCode,
-  FaRocket,
   FaCheckDouble,
   FaCircle,
   FaTrash,
-  FaRobot
+  FaRobot,
+  FaVolumeUp
 } from 'react-icons/fa';
 import './App.css';
 import DocumentPreviewer from './components/DocumentPreviewer';
@@ -84,9 +74,11 @@ function App() {
   }, [user?.user_id]);
   const [showSettings, setShowSettings] = useState(false);
   const [showPortal, setShowPortal] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
   const [showDocumentPreviewer, setShowDocumentPreviewer] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
+  const [showChatOptions, setShowChatOptions] = useState(false);
 
   const [selectedProject, setSelectedProject] = useState(null);
   const [onboardingStep, setOnboardingStep] = useState(1);
@@ -107,36 +99,12 @@ function App() {
   const [chats, setChats] = useState([
     {
       id: 1,
-      name: 'Acme Corp - Cloud Migration',
-      preview: 'Phase 2: Migration planning',
-      avatar: 'A',
-      messages: [
-        { id: 1, text: "Hello! I'm your AI assistant. How can I help you today?", isBot: true, timestamp: new Date() }
-      ],
+      name: 'New Chat',
+      preview: 'Start a new conversation',
+      avatar: 'N',
+      messages: [], // Empty messages array for blank chat
       isActive: true,
       unreadCount: 0
-    },
-    {
-      id: 2,
-      name: 'Globex Inc - Kubernetes Modernization',
-      preview: 'POC ready for review',
-      avatar: 'G',
-      messages: [
-        { id: 1, text: "Hello! I'm your AI assistant. How can I help you today?", isBot: true, timestamp: new Date() }
-      ],
-      isActive: false,
-      unreadCount: 2
-    },
-    {
-      id: 3,
-      name: 'Nimbus Partners - Multi-Cloud Strategy',
-      preview: 'Draft architecture shared',
-      avatar: 'N',
-      messages: [
-        { id: 1, text: "Hello! I'm your AI assistant. How can I help you today?", isBot: true, timestamp: new Date() }
-      ],
-      isActive: false,
-      unreadCount: 1
     }
   ]);
   const [currentChatId, setCurrentChatId] = useState(1);
@@ -147,6 +115,20 @@ function App() {
   const [projectIds, setProjectIds] = useState({}); // Track project IDs for each chat - used to link conversations to projects
   const [userSessions, setUserSessions] = useState([]); // Store user sessions from API
   const [isLoadingSessions, setIsLoadingSessions] = useState(false); // Loading state for sessions
+
+  // Close chat options dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showChatOptions && !event.target.closest('.chat-options-container')) {
+        setShowChatOptions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showChatOptions]);
 
   const handleLogout = async () => {
     try {
@@ -597,12 +579,10 @@ function App() {
     const newChatId = Math.max(...chats.map(chat => chat.id)) + 1;
     const newChat = {
       id: newChatId,
-      name: `Project Chat ${newChatId}`,
+      name: `New Chat ${newChatId}`,
       preview: 'Start a new conversation',
       avatar: String.fromCharCode(65 + (newChatId - 1) % 26), // A, B, C, etc.
-      messages: [
-        { id: 1, text: "Hello! I'm your AI assistant. How can I help you today?", isBot: true, timestamp: new Date() }
-      ],
+      messages: [], // Empty messages array for blank chat
       isActive: false,
       unreadCount: 0
     };
@@ -628,6 +608,18 @@ function App() {
       ...prev,
       [newChatId]: null
     }));
+    
+    // Add new chat to userSessions for Recent Sessions display
+    const newSession = {
+      session_id: `local_${newChatId}`,
+      project_name: newChat.name,
+      message_count: 1,
+      is_active: true,
+      last_activity: new Date().toISOString(),
+      project_id: null
+    };
+    
+    setUserSessions(prev => [newSession, ...prev]);
     
     setChats(updatedChats);
     setCurrentChatId(newChatId);
@@ -697,6 +689,12 @@ function App() {
   };
 
   const handleSessionClick = async (session) => {
+    // Move the clicked session to the top of the Recent Sessions list
+    setUserSessions(prev => {
+      const otherSessions = prev.filter(s => s.session_id !== session.session_id);
+      return [session, ...otherSessions];
+    });
+
     // Check if there's already a chat with this session_id
     const existingChatId = Object.keys(sessionIds).find(chatId => 
       sessionIds[chatId] === session.session_id
@@ -1103,6 +1101,34 @@ function App() {
         
         setChats(updatedChatsWithResponse);
         
+        // Update userSessions to reflect new message count and move to top
+        setUserSessions(prev => {
+          const updatedSessions = prev.map(session => {
+            if (session.session_id === `local_${currentChatId}` || session.session_id === sessionIds[currentChatId]) {
+              return {
+                ...session,
+                message_count: session.message_count + 2, // +2 for user message and bot response
+                last_activity: new Date().toISOString()
+              };
+            }
+            return session;
+          });
+          
+          // Move the current session to the top
+          const currentSession = updatedSessions.find(session => 
+            session.session_id === `local_${currentChatId}` || session.session_id === sessionIds[currentChatId]
+          );
+          
+          if (currentSession) {
+            const otherSessions = updatedSessions.filter(session => 
+              session.session_id !== currentSession.session_id
+            );
+            return [currentSession, ...otherSessions];
+          }
+          
+          return updatedSessions;
+        });
+        
       } catch (error) {
         console.error('Chatbot API error:', error);
         
@@ -1147,6 +1173,31 @@ function App() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+
+  const saveChatToArchives = () => {
+    if (currentChat) {
+      // Here you would implement the logic to save the chat to archives
+      console.log('Saving chat to archives:', currentChat.name);
+      alert(`Chat "${currentChat.name}" has been saved to archives`);
+      setShowChatOptions(false);
+    }
+  };
+
+  const saveChatAsPDF = () => {
+    if (currentChat) {
+      // Here you would implement the logic to save the chat as PDF
+      console.log('Saving chat as PDF:', currentChat.name);
+      alert(`Chat "${currentChat.name}" is being saved as PDF`);
+      setShowChatOptions(false);
+    }
+  };
+
+  const deleteCurrentChat = () => {
+    if (currentChat && window.confirm(`Are you sure you want to delete "${currentChat.name}"?`)) {
+      deleteChat(currentChat.id);
+      setShowChatOptions(false);
+    }
   };
 
   // Helper function to convert document URLs to clickable links
@@ -1511,9 +1562,6 @@ function App() {
               />
               <span className="logo-text">Quadra</span>
             </div>
-            <div className="chat-counter">
-              {chats.length} {chats.length === 1 ? 'chat' : 'chats'}
-            </div>
           </div>
           
           <div className="sidebar-menu">
@@ -1524,67 +1572,50 @@ function App() {
 
             <div className="menu-item">
               <span className="menu-icon"><FaArchive /></span>
-              <span>Save chat to archived chats</span>
+              <span>Archived Chats</span>
             </div>
-            <div className="menu-item">
-              <span className="menu-icon"><FaHistory /></span>
-              <span>Open all previous chats</span>
-            </div>
+
           </div>
           
-          <div className="search-section">
-            <div className="search-container">
-              <span className="search-icon"><FaSearch /></span>
-              <input type="text" placeholder="Search chats..." className="search-input" />
-            </div>
-          </div>
+
           
-          <div className="chat-list">
-            {chats.map((chat) => (
-              <div 
-                key={chat.id}
-                className={`chat-item ${chat.isActive ? 'active' : ''}`}
-                onClick={() => switchChat(chat.id)}
-                onDoubleClick={() => {
-                  const newName = prompt('Enter new chat name:', chat.name);
-                  if (newName !== null) {
-                    renameChat(chat.id, newName);
-                  }
-                }}
-                title="Click to switch, double-click to rename"
-              >
-                <div className="chat-avatar">{chat.avatar}</div>
-                <div className="chat-info">
-                  <div className="chat-name">{chat.name}</div>
-                  <div className="chat-preview">
-                    {chat.messages.length > 1 
-                      ? `${chat.messages[chat.messages.length - 1].text.substring(0, 40)}${chat.messages[chat.messages.length - 1].text.length > 40 ? '...' : ''}`
-                      : 'Start a new conversation'
-                    }
-                  </div>
-                  {chat.messages.length > 1 && (
-                    <div className="chat-timestamp">
-                      {formatRelativeTime(chat.messages[chat.messages.length - 1].timestamp)}
-                    </div>
-                  )}
-                </div>
-                {chat.unreadCount > 0 && (
-                  <div className="unread-badge">
-                    {chat.unreadCount > 99 ? '99+' : chat.unreadCount}
-                  </div>
-                )}
-                <button 
-                  className="delete-chat-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteChat(chat.id);
-                  }}
-                  title="Delete chat"
-                >
-                  <FaTrash />
-                </button>
+
+          
+          <div className="sidebar-section">
+            <h3 className="section-title">Recent Sessions</h3>
+            {isLoadingSessions ? (
+              <div className="sessions-loading">
+                <span>Loading sessions...</span>
               </div>
-            ))}
+            ) : userSessions.length > 0 ? (
+              <div className="sessions-list">
+                {userSessions.map((session) => (
+                  <div 
+                    key={session.session_id} 
+                    className="session-item"
+                    onClick={() => handleSessionClick(session)}
+                  >
+                    <div className="session-header">
+                      <span className="session-project">{session.project_name}</span>
+                      <span className={`session-status ${session.is_active ? 'active' : 'inactive'}`}>
+                        {session.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <div className="session-details">
+                      <span className="session-messages">{session.message_count} messages</span>
+                      <span className="session-time">
+                        {formatRelativeTime(new Date(session.last_activity))}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                
+              </div>
+            ) : (
+              <div className="sessions-empty">
+                <span>No recent sessions</span>
+              </div>
+            )}
           </div>
           
           <div className="user-profile">
@@ -1615,72 +1646,112 @@ function App() {
               </div>
             </div>
             <div className="header-actions">
-              <button className="action-btn"><FaEllipsisH /></button>
+              <div className="chat-options-container">
+                <button 
+                  className="action-btn" 
+                  onClick={() => setShowChatOptions(!showChatOptions)}
+                >
+                  <FaEllipsisH />
+                </button>
+                
+                {showChatOptions && (
+                  <div className="chat-options-dropdown">
+                    <div className="dropdown-item" onClick={saveChatToArchives}>
+                      <FaArchive />
+                      <span>Save this chat to archives</span>
+                    </div>
+                    <div className="dropdown-item" onClick={saveChatAsPDF}>
+                      <FaFileAlt />
+                      <span>Save this chat as PDF</span>
+                    </div>
+                    <div className="dropdown-item delete-option" onClick={deleteCurrentChat}>
+                      <FaTrash />
+                      <span>Delete chat</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           
           <div className="chat-messages">
-            {messages.map((message) => (
-              <div key={message.id} className={`message ${message.isBot ? 'bot' : 'user'}`}>
-                <div className="message-avatar">
-                  {message.isBot ? 'Q' : userInitial}
+            {messages.length === 0 ? (
+              <div className="welcome-placeholder">
+                <div className="placeholder-icon">
+                  <FaRobot />
                 </div>
-                <div className="message-content">
-                  {message.type === 'file' ? (
-                    <div className="file-message">
-                      <div className="file-info" onClick={() => {
-                        setPreviewFile(message);
-                        setShowDocumentPreviewer(true);
-                      }}>
-                        <FaPaperclip className="file-icon" />
-                        <span className="file-name">{message.fileName}</span>
-                        <span className="file-size">{message.fileSize}</span>
-                      </div>
-                      <button className="download-btn" onClick={downloadSOW}>
-                        <FaDownload /> Download SOW
-                      </button>
+                <h2 className="placeholder-title">Where should we begin?</h2>
+                <p className="placeholder-subtitle">Start a new conversation by typing in the input box below</p>
+              </div>
+            ) : (
+              <>
+                {messages.map((message) => (
+                  <div key={message.id} className={`message ${message.isBot ? 'bot' : 'user'}`}>
+                    <div className="message-avatar">
+                      {message.isBot ? 'Q' : userInitial}
                     </div>
-                  ) : (
-                    <div className={`message-text ${message.isProcessing ? 'processing' : ''}`}>
-                      {message.isBot ? (
-                        <MarkdownWithLinks text={message.text} />
+                    <div className="message-content">
+                      {message.type === 'file' ? (
+                        <div className="file-message">
+                          <div className="file-info" onClick={() => {
+                            setPreviewFile(message);
+                            setShowDocumentPreviewer(true);
+                          }}>
+                            <FaPaperclip className="file-icon" />
+                            <span className="file-name">{message.fileName}</span>
+                            <span className="file-size">{message.fileSize}</span>
+                          </div>
+                          <button className="download-btn" onClick={downloadSOW}>
+                            <FaDownload /> Download SOW
+                          </button>
+                        </div>
                       ) : (
-                        message.text
+                        <div className={`message-text ${message.isProcessing ? 'processing' : ''}`}>
+                          {message.isBot ? (
+                            <MarkdownWithLinks text={message.text} />
+                          ) : (
+                            message.text
+                          )}
+                        </div>
                       )}
+                      <div className="message-time">
+                        {formatRelativeTime(message.timestamp)}
+                      </div>
                     </div>
-                  )}
-                  <div className="message-time">
-                    {formatRelativeTime(message.timestamp)}
                   </div>
-                </div>
-              </div>
-            ))}
-            {isTyping && (
-              <div className="typing-indicator">
-                <FaPaperPlane />
-              </div>
+                ))}
+                {isTyping && (
+                  <div className="typing-indicator">
+                    <FaPaperPlane />
+                  </div>
+                )}
+              </>
             )}
           </div>
           
           <div className="chat-input-container">
             <form onSubmit={handleSendMessage} className="chat-input-form">
               <div className="input-actions">
-                <button type="button" className="action-button"><FaPaperclip /></button>
-                <button type="button" className="action-button"><FaLink /></button>
-                <button type="button" className="action-button"><FaImage /></button>
-                <button type="button" className="action-button"><FaMicrophone /></button>
-                <button type="button" className="action-button"><FaCamera /></button>
+                <button type="button" className="action-button plus-button"><FaPlus /></button>
               </div>
               <input
                 type="text"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="Say something..."
+                placeholder="Ask anything"
                 className="chat-input"
               />
-              <button type="submit" className="send-button">
-                <FaPaperPlane />
-              </button>
+              <div className="input-right-actions">
+                <button type="button" className="action-button">
+                  <FaMicrophone />
+                </button>
+                <button type="button" className="action-button">
+                  <FaVolumeUp />
+                </button>
+                <button type="submit" className="action-button send-button">
+                  <FaPaperPlane />
+                </button>
+              </div>
             </form>
           </div>
         </div>
@@ -1716,59 +1787,16 @@ function App() {
                  <span className="action-icon"><FaFolder /></span>
                  <span className="action-text">Projects archive</span>
                </div>
-               <div className="quick-action-item">
+               <div className="quick-action-item" onClick={() => setShowDashboard(true)}>
                  <span className="action-icon"><FaChartBar /></span>
                  <span className="action-text">Dashboard</span>
                </div>
              </div>
            </div>
 
-           <div className="sidebar-section">
-             <h3 className="section-title">Recent Sessions</h3>
-             {isLoadingSessions ? (
-               <div className="sessions-loading">
-                 <span>Loading sessions...</span>
-               </div>
-             ) : userSessions.length > 0 ? (
-               <div className="sessions-list">
-                 {userSessions.slice(0, 5).map((session) => (
-                   <div 
-                     key={session.session_id} 
-                     className="session-item"
-                     onClick={() => handleSessionClick(session)}
-                   >
-                     <div className="session-header">
-                       <span className="session-project">{session.project_name}</span>
-                       <span className={`session-status ${session.is_active ? 'active' : 'inactive'}`}>
-                         {session.is_active ? 'Active' : 'Inactive'}
-                       </span>
-                     </div>
-                     <div className="session-details">
-                       <span className="session-messages">{session.message_count} messages</span>
-                       <span className="session-time">
-                         {formatRelativeTime(new Date(session.last_activity))}
-                       </span>
-                     </div>
-                   </div>
-                 ))}
-                 {userSessions.length > 5 && (
-                   <div className="sessions-more">
-                     <span>+{userSessions.length - 5} more sessions</span>
-                   </div>
-                 )}
-               </div>
-             ) : (
-               <div className="sessions-empty">
-                 <span>No recent sessions</span>
-               </div>
-             )}
-           </div>
+
           
-          <div className="floating-actions">
-            <button className="floating-btn"><FaFolderOpen /></button>
-            <button className="floating-btn"><FaMapMarkerAlt /></button>
-            <button className="floating-btn"><FaCameraRetro /></button>
-          </div>
+
         </div>
         
         {/* Portal Screen */}
@@ -2345,6 +2373,191 @@ function App() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Dashboard Popup */}
+        {showDashboard && (
+          <div className="dashboard-overlay" onClick={() => setShowDashboard(false)}>
+            <div className="dashboard-popup" onClick={(e) => e.stopPropagation()}>
+              <div className="dashboard-header">
+                <div className="dashboard-header-left">
+                  <h2 className="dashboard-title">Dashboard</h2>
+                  <p className="dashboard-subtitle">Overview of your projects and activities</p>
+                </div>
+                <button 
+                  className="dashboard-close-btn" 
+                  onClick={() => setShowDashboard(false)}
+                >
+                  <FaTimes />
+                </button>
+              </div>
+              
+              <div className="dashboard-content">
+                {/* Stats Overview */}
+                <div className="dashboard-stats">
+                  <div className="stat-card">
+                    <div className="stat-icon">
+                      <FaProjectDiagram />
+                    </div>
+                    <div className="stat-content">
+                      <h3 className="stat-number">{projects.length}</h3>
+                      <p className="stat-label">Total Projects</p>
+                    </div>
+                  </div>
+                  
+                  <div className="stat-card">
+                    <div className="stat-icon">
+                      <FaUsers />
+                    </div>
+                    <div className="stat-content">
+                      <h3 className="stat-number">
+                        {projects.reduce((total, project) => 
+                          total + project.csaMembers.length + project.quadrantTeam.length + project.clientMembers.length, 0
+                        )}
+                      </h3>
+                      <p className="stat-label">Team Members</p>
+                    </div>
+                  </div>
+                  
+                  <div className="stat-card">
+                    <div className="stat-icon">
+                      <FaCalendarCheck />
+                    </div>
+                    <div className="stat-content">
+                      <h3 className="stat-number">
+                        {projects.filter(project => project.status === 'In Progress').length}
+                      </h3>
+                      <p className="stat-label">Active Projects</p>
+                    </div>
+                  </div>
+                  
+                  <div className="stat-card">
+                    <div className="stat-icon">
+                      <FaFileContract />
+                    </div>
+                    <div className="stat-content">
+                      <h3 className="stat-number">
+                        {projects.reduce((total, project) => 
+                          total + project.timeline.reduce((phaseTotal, phase) => 
+                            phaseTotal + phase.documents.length, 0
+                          ), 0
+                        )}
+                      </h3>
+                      <p className="stat-label">Documents</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recent Activity */}
+                <div className="dashboard-section">
+                  <h3 className="section-title">Recent Activity</h3>
+                  <div className="activity-list">
+                    {projects.slice(0, 3).map((project) => (
+                      <div key={project.id} className="activity-item">
+                        <div className="activity-icon">
+                          <FaProjectDiagram />
+                        </div>
+                        <div className="activity-content">
+                          <h4 className="activity-title">{project.title}</h4>
+                          <p className="activity-description">
+                            Project {project.status.toLowerCase()} - {project.company}
+                          </p>
+                          <span className="activity-time">
+                            Started {new Date(project.startDate).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <div className="activity-status">
+                          <span className={`status-badge ${project.status.toLowerCase().replace(' ', '-')}`}>
+                            {project.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Project Status Overview */}
+                <div className="dashboard-section">
+                  <h3 className="section-title">Project Status Overview</h3>
+                  <div className="status-overview">
+                    <div className="status-item">
+                      <div className="status-header">
+                        <span className="status-label">New</span>
+                        <span className="status-count">
+                          {projects.filter(p => p.status === 'New').length}
+                        </span>
+                      </div>
+                      <div className="status-bar">
+                        <div 
+                          className="status-fill new" 
+                          style={{width: `${(projects.filter(p => p.status === 'New').length / projects.length) * 100}%`}}
+                        ></div>
+                      </div>
+                    </div>
+                    
+                    <div className="status-item">
+                      <div className="status-header">
+                        <span className="status-label">In Progress</span>
+                        <span className="status-count">
+                          {projects.filter(p => p.status === 'In Progress').length}
+                        </span>
+                      </div>
+                      <div className="status-bar">
+                        <div 
+                          className="status-fill in-progress" 
+                          style={{width: `${(projects.filter(p => p.status === 'In Progress').length / projects.length) * 100}%`}}
+                        ></div>
+                      </div>
+                    </div>
+                    
+                    <div className="status-item">
+                      <div className="status-header">
+                        <span className="status-label">Completed</span>
+                        <span className="status-count">
+                          {projects.filter(p => p.status === 'Completed').length}
+                        </span>
+                      </div>
+                      <div className="status-bar">
+                        <div 
+                          className="status-fill completed" 
+                          style={{width: `${(projects.filter(p => p.status === 'Completed').length / projects.length) * 100}%`}}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="dashboard-section">
+                  <h3 className="section-title">Quick Actions</h3>
+                  <div className="quick-actions-grid">
+                                         <button className="quick-action-btn" onClick={() => {
+                       setShowDashboard(false);
+                       setShowNewProjectForm(true);
+                     }}>
+                       <FaPlusCircle />
+                       <span>Create New Project</span>
+                     </button>
+                     <button className="quick-action-btn" onClick={() => {
+                       setShowDashboard(false);
+                       setShowPortal(true);
+                     }}>
+                       <FaFolderOpen />
+                       <span>View All Projects</span>
+                     </button>
+                    <button className="quick-action-btn">
+                      <FaChartBar />
+                      <span>Generate Report</span>
+                    </button>
+                    <button className="quick-action-btn">
+                      <FaUsers />
+                      <span>Manage Team</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
