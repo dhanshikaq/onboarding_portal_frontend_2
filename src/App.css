@@ -3276,3 +3276,29 @@ body {
   font-style: italic;
   opacity: 0.8;
 }
+
+/* Document Download Links */
+.document-download-link {
+  display: inline-block;
+  background: #28a745;
+  color: white;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  margin: 4px 0;
+  transition: background-color 0.2s;
+  border: none;
+  cursor: pointer;
+}
+
+.document-download-link:hover {
+  background: #218838;
+  color: white;
+  text-decoration: none;
+}
+
+.document-download-link:active {
+  background: #1e7e34;
+}

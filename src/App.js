@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   FaPlusCircle,
   FaArchive,
@@ -1149,6 +1149,103 @@ function App() {
     document.body.removeChild(a);
   };
 
+  // Helper function to convert document URLs to clickable links
+  const convertDocumentUrlsToLinks = (text) => {
+    if (!text) return text;
+    
+    // Regex to match document download URLs
+    const urlRegex = /(https?:\/\/localhost:8000\/api\/chatbot\/download\/[^\s]+)/g;
+    
+    return text.replace(urlRegex, (match) => {
+      // Extract file type and filename from URL
+      const urlParts = match.split('/');
+      const fileType = urlParts[urlParts.length - 2]; // e.g., "docx", "pdf"
+      const filename = urlParts[urlParts.length - 1]; // e.g., "generated_sow.docx"
+      
+      // Create a more user-friendly display text
+      const displayText = `Download ${fileType.toUpperCase()} Document`;
+      
+      return `<a href="${match}" target="_blank" download="${filename}" class="document-download-link">${displayText}</a>`;
+    });
+  };
+
+  // Custom component to render markdown with clickable document links
+  const MarkdownWithLinks = ({ text }) => {
+    if (!text) return null;
+    
+    // Check if text contains document URLs
+    const urlRegex = /(https?:\/\/localhost:8000\/api\/chatbot\/download\/[^\s]+)/g;
+    const hasDocumentUrls = urlRegex.test(text);
+    
+    if (!hasDocumentUrls) {
+      // If no document URLs, just render normal markdown
+      return <MarkdownRenderer text={text} />;
+    }
+    
+    // Split text into parts: regular text and URLs
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+    
+    // Reset regex
+    urlRegex.lastIndex = 0;
+    
+    while ((match = urlRegex.exec(text)) !== null) {
+      // Add text before the URL
+      if (match.index > lastIndex) {
+        parts.push({
+          type: 'text',
+          content: text.slice(lastIndex, match.index)
+        });
+      }
+      
+      // Add the URL
+      const urlParts = match[0].split('/');
+      const fileType = urlParts[urlParts.length - 2];
+      const filename = urlParts[urlParts.length - 1];
+      const displayText = `Download ${fileType.toUpperCase()} Document`;
+      
+      parts.push({
+        type: 'url',
+        url: match[0],
+        displayText,
+        filename
+      });
+      
+      lastIndex = match.index + match[0].length;
+    }
+    
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push({
+        type: 'text',
+        content: text.slice(lastIndex)
+      });
+    }
+    
+    return (
+      <div>
+        {parts.map((part, index) => {
+          if (part.type === 'text') {
+            return <MarkdownRenderer key={index} text={part.content} />;
+          } else {
+            return (
+              <a
+                key={index}
+                href={part.url}
+                target="_blank"
+                download={part.filename}
+                className="document-download-link"
+              >
+                {part.displayText}
+              </a>
+            );
+          }
+        })}
+      </div>
+    );
+  };
+
   
 
   const createProjectFromQuadraPrompt = async (promptText) => {
@@ -1546,7 +1643,7 @@ function App() {
                   ) : (
                     <div className={`message-text ${message.isProcessing ? 'processing' : ''}`}>
                       {message.isBot ? (
-                        <MarkdownRenderer text={message.text} />
+                        <MarkdownWithLinks text={message.text} />
                       ) : (
                         message.text
                       )}
