@@ -5,6 +5,15 @@ import './MarkdownRenderer.css';
 const MarkdownRenderer = ({ text, className = '' }) => {
   if (!text) return null;
 
+  // Preprocess text to convert bullet characters to proper markdown
+  const preprocessText = (text) => {
+    // Convert bullet characters (•) to markdown list items
+    // This handles cases where the backend sends bullet characters instead of proper markdown
+    return text.replace(/^[•]\s*/gm, '- ');
+  };
+
+  const processedText = preprocessText(text);
+
   return (
     <div className={`markdown-content ${className}`}>
       <ReactMarkdown
@@ -27,7 +36,7 @@ const MarkdownRenderer = ({ text, className = '' }) => {
           em: ({ children }) => <em className="markdown-italic">{children}</em>,
         }}
       >
-        {text}
+        {processedText}
       </ReactMarkdown>
     </div>
   );

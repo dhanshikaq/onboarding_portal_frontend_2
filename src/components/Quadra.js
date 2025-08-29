@@ -129,6 +129,8 @@ const Quadra = ({ onClose }) => {
     document.body.removeChild(a);
   };
 
+  
+
   return (
     <div className="quadra-container">
       <div className="quadra-header">
@@ -161,7 +163,7 @@ const Quadra = ({ onClose }) => {
                     <FaDownload /> Download SOW
                   </button>
                 </div>
-              ) : (
+                             ) : (
                 <div className={`quadra-text ${message.isProcessing ? 'processing' : ''}`}>{message.text}</div>
               )}
               <div className="quadra-timestamp">

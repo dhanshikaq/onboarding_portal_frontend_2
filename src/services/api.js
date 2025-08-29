@@ -79,7 +79,7 @@ class ApiService {
    * @returns {Promise<Object>} Response with format:
    * {
    *   success: boolean,
-   *   response: string,
+   *   response: string,  // Contains full document content when documents are generated
    *   conversation_state: Object,
    *   session_id: number,  // NEW: Session ID for tracking
    *   user_projects_count: number,

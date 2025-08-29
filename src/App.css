@@ -844,6 +844,48 @@ body {
   border: none;
 }
 
+/* Markdown content styling within chat messages */
+.message-text .markdown-content {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.message-text .markdown-content p {
+  margin: 0 0 8px 0;
+}
+
+.message-text .markdown-content p:last-child {
+  margin-bottom: 0;
+}
+
+.message-text .markdown-content ul,
+.message-text .markdown-content ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.message-text .markdown-content li {
+  margin: 4px 0;
+}
+
+.message-text .markdown-content strong {
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.message-text .markdown-content em {
+  font-style: italic;
+}
+
+.message-text .markdown-content code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.9em;
+}
+
 .message-time {
   font-size: 12px;
   color: #8e8e93;
@@ -3167,6 +3209,65 @@ body {
 
 .download-btn:hover {
   background: #218838;
+}
+
+/* Document Messages */
+.document-message {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.document-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  transition: all 0.2s;
+}
+
+.document-info:hover {
+  background: #e9ecef;
+  border-color: #6c757d;
+}
+
+.document-icon {
+  color: #dc3545;
+  font-size: 20px;
+  margin-top: 2px;
+}
+
+.document-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.document-name {
+  font-weight: 600;
+  color: #495057;
+  font-size: 14px;
+}
+
+.document-description {
+  font-size: 12px;
+  color: #6c757d;
+  line-height: 1.4;
+}
+
+.document-type {
+  font-size: 11px;
+  color: #6c757d;
+  background: #e9ecef;
+  padding: 2px 8px;
+  border-radius: 12px;
+  align-self: flex-start;
+  text-transform: uppercase;
+  font-weight: 500;
 }
 
 /* Processing Messages */

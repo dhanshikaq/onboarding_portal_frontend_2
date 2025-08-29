@@ -45,6 +45,7 @@ import {
 import './App.css';
 import DocumentPreviewer from './components/DocumentPreviewer';
 import ApiService from './services/api';
+import MarkdownRenderer from './components/MarkdownRenderer';
 
 
 function App() {
@@ -1148,6 +1149,8 @@ function App() {
     document.body.removeChild(a);
   };
 
+  
+
   const createProjectFromQuadraPrompt = async (promptText) => {
     // Extract project details from the Quadra prompt
     const projectName = "Agentic AI Platform";
@@ -1542,7 +1545,11 @@ function App() {
                     </div>
                   ) : (
                     <div className={`message-text ${message.isProcessing ? 'processing' : ''}`}>
-                      {message.text}
+                      {message.isBot ? (
+                        <MarkdownRenderer text={message.text} />
+                      ) : (
+                        message.text
+                      )}
                     </div>
                   )}
                   <div className="message-time">
