@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { 
   FaPlus,
   FaPlusCircle,
-  FaArchive,
   FaEllipsisH, 
   FaPaperclip, 
   FaMicrophone, 
@@ -18,6 +17,7 @@ import {
   FaClock,
   FaTimes,
   FaChevronDown,
+  FaChevronUp,
   FaFileAlt,
   FaDownload,
   FaEye,
@@ -30,7 +30,8 @@ import {
   FaCircle,
   FaTrash,
   FaRobot,
-  FaVolumeUp
+  FaVolumeUp,
+  FaPlay
 } from 'react-icons/fa';
 import './App.css';
 import DocumentPreviewer from './components/DocumentPreviewer';
@@ -82,6 +83,7 @@ function App() {
 
   const [selectedProject, setSelectedProject] = useState(null);
   const [onboardingStep, setOnboardingStep] = useState(1);
+  const [isProjectInfoCollapsed, setIsProjectInfoCollapsed] = useState(true);
   const [onboardingData, setOnboardingData] = useState({
     company: '',
     companyIndustry: '',
@@ -115,6 +117,21 @@ function App() {
   const [projectIds, setProjectIds] = useState({}); // Track project IDs for each chat - used to link conversations to projects
   const [userSessions, setUserSessions] = useState([]); // Store user sessions from API
   const [isLoadingSessions, setIsLoadingSessions] = useState(false); // Loading state for sessions
+  
+  // Document upload state
+  const [showDocumentUpload, setShowDocumentUpload] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
+  
+  // Document preview state
+  const [selectedDocument, setSelectedDocument] = useState(null);
+  const [documentPreviewUrl, setDocumentPreviewUrl] = useState(null);
+
+  // Phase completion confirmation state
+  const [showPhaseConfirmation, setShowPhaseConfirmation] = useState(false);
+  const [phaseToComplete, setPhaseToComplete] = useState(null);
+  const [showPhaseSuccess, setShowPhaseSuccess] = useState(false);
+  const [completedPhaseName, setCompletedPhaseName] = useState('');
 
   // Close chat options dropdown when clicking outside
   React.useEffect(() => {
@@ -129,6 +146,30 @@ function App() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showChatOptions]);
+
+  // Close document upload when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showDocumentUpload && !event.target.closest('.document-upload-section') && !event.target.closest('.add-document-btn')) {
+        setShowDocumentUpload(false);
+        setUploadedFiles([]);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDocumentUpload]);
+
+  // Cleanup preview URLs when component unmounts or document changes
+  React.useEffect(() => {
+    return () => {
+      if (documentPreviewUrl) {
+        URL.revokeObjectURL(documentPreviewUrl);
+      }
+    };
+  }, [documentPreviewUrl]);
 
   const handleLogout = async () => {
     try {
@@ -276,19 +317,7 @@ function App() {
         },
         {
           id: 4,
-          phase: 'Development',
-          status: 'pending',
-          documents: []
-        },
-        {
-          id: 5,
-          phase: 'Testing & QA',
-          status: 'pending',
-          documents: []
-        },
-        {
-          id: 6,
-          phase: 'Deployment',
+          phase: 'Closure',
           status: 'pending',
           documents: []
         }
@@ -325,6 +354,18 @@ function App() {
           phase: 'Project Planning',
           status: 'in-progress',
           documents: []
+        },
+        {
+          id: 3,
+          phase: 'Design Phase',
+          status: 'pending',
+          documents: []
+        },
+        {
+          id: 4,
+          phase: 'Closure',
+          status: 'pending',
+          documents: []
         }
       ]
     },
@@ -357,6 +398,18 @@ function App() {
         {
           id: 2,
           phase: 'Project Planning',
+          status: 'pending',
+          documents: []
+        },
+        {
+          id: 3,
+          phase: 'Design Phase',
+          status: 'pending',
+          documents: []
+        },
+        {
+          id: 4,
+          phase: 'Closure',
           status: 'pending',
           documents: []
         }
@@ -496,37 +549,25 @@ function App() {
         timeline: [
           {
             id: 1,
-            phase: 'Project Initiation',
+            phase: 'Discovery Call',
             status: 'completed',
             documents: []
           },
           {
             id: 2,
-            phase: 'Requirements Gathering',
+            phase: 'Project Planning',
             status: 'pending',
             documents: []
           },
           {
             id: 3,
-            phase: 'Design & Architecture',
+            phase: 'Design Phase',
             status: 'pending',
             documents: []
           },
           {
             id: 4,
-            phase: 'Development',
-            status: 'pending',
-            documents: []
-          },
-          {
-            id: 5,
-            phase: 'Testing & QA',
-            status: 'pending',
-            documents: []
-          },
-          {
-            id: 6,
-            phase: 'Deployment',
+            phase: 'Closure',
             status: 'pending',
             documents: []
           }
@@ -1175,14 +1216,7 @@ function App() {
     document.body.removeChild(a);
   };
 
-  const saveChatToArchives = () => {
-    if (currentChat) {
-      // Here you would implement the logic to save the chat to archives
-      console.log('Saving chat to archives:', currentChat.name);
-      alert(`Chat "${currentChat.name}" has been saved to archives`);
-      setShowChatOptions(false);
-    }
-  };
+
 
   const saveChatAsPDF = () => {
     if (currentChat) {
@@ -1382,7 +1416,7 @@ function App() {
       timeline: [
         {
           id: 1,
-          phase: 'Project Initiation',
+          phase: 'Discovery Call',
           status: 'completed',
           documents: [
             { 
@@ -1397,31 +1431,19 @@ function App() {
         },
         {
           id: 2,
-          phase: 'Requirements Gathering',
+          phase: 'Project Planning',
           status: 'pending',
           documents: []
         },
         {
           id: 3,
-          phase: 'Design & Architecture',
+          phase: 'Design Phase',
           status: 'pending',
           documents: []
         },
         {
           id: 4,
-          phase: 'Development',
-          status: 'pending',
-          documents: []
-        },
-        {
-          id: 5,
-          phase: 'Testing & QA',
-          status: 'pending',
-          documents: []
-        },
-        {
-          id: 6,
-          phase: 'Deployment',
+          phase: 'Closure',
           status: 'pending',
           documents: []
         }
@@ -1470,7 +1492,7 @@ function App() {
        timeline: [
          {
            id: 1,
-           phase: 'Project Initiation',
+           phase: 'Discovery Call',
            status: 'completed',
            documents: [
              { 
@@ -1485,31 +1507,19 @@ function App() {
          },
          {
            id: 2,
-           phase: 'Requirements Gathering',
+           phase: 'Project Planning',
            status: 'pending',
            documents: []
          },
          {
            id: 3,
-           phase: 'Design & Architecture',
+           phase: 'Design Phase',
            status: 'pending',
            documents: []
          },
          {
            id: 4,
-           phase: 'Development',
-           status: 'pending',
-           documents: []
-         },
-         {
-           id: 5,
-           phase: 'Testing & QA',
-           status: 'pending',
-           documents: []
-         },
-         {
-           id: 6,
-           phase: 'Deployment',
+           phase: 'Closure',
            status: 'pending',
            documents: []
          }
@@ -1545,6 +1555,197 @@ function App() {
     e.target.reset();
   };
 
+  // Document upload functions
+  const handleFileSelect = (event) => {
+    const files = Array.from(event.target.files);
+    setUploadedFiles(files);
+  };
+
+  const handleDocumentUpload = async () => {
+    if (!selectedProject || uploadedFiles.length === 0) return;
+    
+    setIsUploading(true);
+    
+    try {
+      // Find the current active phase (in-progress or completed)
+      const currentPhase = selectedProject.timeline.find(p => p.status === 'in-progress') || 
+                          selectedProject.timeline.find(p => p.status === 'completed');
+      
+      if (!currentPhase) {
+        alert('No active phase found for document upload');
+        return;
+      }
+
+      // Create new documents with uploaded file info
+      const newDocuments = uploadedFiles.map((file, index) => ({
+        id: Date.now() + index,
+        name: file.name,
+        type: file.name.split('.').pop().toLowerCase(),
+        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+        uploadedBy: user?.name || 'Current User',
+        uploadedAt: new Date().toISOString().split('T')[0],
+        file: file // Store the actual file object for preview
+      }));
+
+      // Update the project timeline with new documents
+      const updatedProjects = projects.map(project => {
+        if (project.id === selectedProject.id) {
+          return {
+            ...project,
+            timeline: project.timeline.map(phase => {
+              if (phase.id === currentPhase.id) {
+                return {
+                  ...phase,
+                  documents: [...(phase.documents || []), ...newDocuments]
+                };
+              }
+              return phase;
+            })
+          };
+        }
+        return project;
+      });
+
+      setProjects(updatedProjects);
+      
+      // Update selected project
+      const updatedSelectedProject = updatedProjects.find(p => p.id === selectedProject.id);
+      setSelectedProject(updatedSelectedProject);
+      
+      // Reset upload state
+      setUploadedFiles([]);
+      setShowDocumentUpload(false);
+      
+      alert('Documents uploaded successfully!');
+    } catch (error) {
+      console.error('Document upload error:', error);
+      alert('Failed to upload documents. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const removeUploadedFile = (index) => {
+    setUploadedFiles(uploadedFiles.filter((_, i) => i !== index));
+  };
+
+  const handleDocumentSelect = (document) => {
+    setSelectedDocument(document);
+    
+    // Create preview URL for the document
+    if (document.file) {
+      const url = URL.createObjectURL(document.file);
+      setDocumentPreviewUrl(url);
+    } else {
+      setDocumentPreviewUrl(null);
+    }
+  };
+
+  // Phase completion handlers
+  const handlePhaseCompletionClick = () => {
+    const currentPhase = selectedProject.timeline.find(p => p.status === 'in-progress')?.phase;
+    if (currentPhase) {
+      setPhaseToComplete(currentPhase);
+      setShowPhaseConfirmation(true);
+    }
+  };
+
+  const handleConfirmPhaseCompletion = () => {
+    if (selectedProject && phaseToComplete) {
+      // Create a copy of the selected project to update
+      const updatedProject = { ...selectedProject };
+      
+      // Find the target phase
+      const targetPhaseIndex = updatedProject.timeline.findIndex(p => p.phase === phaseToComplete);
+      if (targetPhaseIndex !== -1) {
+        const targetPhase = updatedProject.timeline[targetPhaseIndex];
+        
+        if (targetPhase.status === 'in-progress') {
+          // Completing a phase
+          updatedProject.timeline[targetPhaseIndex].status = 'completed';
+          
+          // Find the next phase and mark it as in-progress
+          const nextPhaseIndex = targetPhaseIndex + 1;
+          if (nextPhaseIndex < updatedProject.timeline.length) {
+            updatedProject.timeline[nextPhaseIndex].status = 'in-progress';
+          }
+          
+          console.log(`Phase "${phaseToComplete}" completed successfully. Moved to next phase.`);
+          
+          // Show success message
+          setCompletedPhaseName(phaseToComplete);
+          setShowPhaseSuccess(true);
+          
+          // Auto-hide success message after 3 seconds
+          setTimeout(() => {
+            setShowPhaseSuccess(false);
+            setCompletedPhaseName('');
+          }, 3000);
+        } else if (targetPhase.status === 'pending') {
+          // Starting a new phase
+          updatedProject.timeline[targetPhaseIndex].status = 'in-progress';
+          
+          console.log(`Phase "${phaseToComplete}" started successfully.`);
+          
+          // Show success message
+          setCompletedPhaseName(phaseToComplete);
+          setShowPhaseSuccess(true);
+          
+          // Auto-hide success message after 3 seconds
+          setTimeout(() => {
+            setShowPhaseSuccess(false);
+            setCompletedPhaseName('');
+          }, 3000);
+        }
+        
+        // Update the selected project
+        setSelectedProject(updatedProject);
+        
+        // Update the projects array to reflect the change
+        setProjects(prevProjects => 
+          prevProjects.map(project => 
+            project.id === updatedProject.id ? updatedProject : project
+          )
+        );
+      }
+    }
+    
+    // Close the confirmation dialog
+    setShowPhaseConfirmation(false);
+    setPhaseToComplete(null);
+  };
+
+  const handleCancelPhaseCompletion = () => {
+    setShowPhaseConfirmation(false);
+    setPhaseToComplete(null);
+  };
+
+  const handleStartNextPhase = () => {
+    const nextPendingPhase = selectedProject.timeline.find(p => p.status === 'pending');
+    if (nextPendingPhase) {
+      setPhaseToComplete(nextPendingPhase.phase);
+      setShowPhaseConfirmation(true);
+    }
+  };
+
+  // Function to calculate project status based on timeline
+  const getProjectStatus = (project) => {
+    if (!project.timeline || project.timeline.length === 0) {
+      return 'New';
+    }
+    
+    const completedPhases = project.timeline.filter(p => p.status === 'completed').length;
+    const totalPhases = project.timeline.length;
+    
+    if (completedPhases === 0) {
+      return 'New';
+    } else if (completedPhases === totalPhases) {
+      return 'Completed';
+    } else {
+      return 'In Progress';
+    }
+  };
+
   if (showChat) {
     return (
       <div className="chat-app">
@@ -1570,10 +1771,7 @@ function App() {
               <span>New chat</span>
             </div>
 
-            <div className="menu-item">
-              <span className="menu-icon"><FaArchive /></span>
-              <span>Archived Chats</span>
-            </div>
+
 
           </div>
           
@@ -1656,10 +1854,7 @@ function App() {
                 
                 {showChatOptions && (
                   <div className="chat-options-dropdown">
-                    <div className="dropdown-item" onClick={saveChatToArchives}>
-                      <FaArchive />
-                      <span>Save this chat to archives</span>
-                    </div>
+
                     <div className="dropdown-item" onClick={saveChatAsPDF}>
                       <FaFileAlt />
                       <span>Save this chat as PDF</span>
@@ -1827,9 +2022,9 @@ function App() {
                 </div>
               </div>
               
-              {/* Portal Content */}
-              <div className="portal-content">
-                {/* Left Pane - Projects */}
+                              {/* Portal Content */}
+                <div className="portal-content">
+                  {/* Left Pane - Projects */}
                 <div className="projects-pane">
                   <div className="pane-header">
                     <h2 className="pane-title">Projects</h2>
@@ -1850,7 +2045,9 @@ function App() {
                       >
                         <div className="project-header">
                           <h3 className="project-title">{project.title}</h3>
-                          <span className="project-status">{project.status}</span>
+                          <span className={`project-status ${getProjectStatus(project).toLowerCase().replace(' ', '-')}`}>
+                            {getProjectStatus(project)}
+                          </span>
                         </div>
                         <p className="project-description">{project.description}</p>
                       </div>
@@ -1860,174 +2057,382 @@ function App() {
                 
                 {/* Right Pane - Project Details */}
                 <div className="project-details-pane">
-                  <h2 className="pane-title">Project Details</h2>
                   {selectedProject ? (
                     <div className="project-details-content">
                       <div className="project-header">
                         <h3 className="project-title">{selectedProject.title}</h3>
-                        <span className="project-status">{selectedProject.status}</span>
+                        <p className="project-description">{selectedProject.description}</p>
+                        <span className={`project-status ${getProjectStatus(selectedProject).toLowerCase().replace(' ', '-')}`}>
+                          {getProjectStatus(selectedProject)}
+                        </span>
                       </div>
-                      <p className="project-description">{selectedProject.description}</p>
                       
                       <div className="project-info-section">
-                        <h4 className="section-title">Project Information</h4>
-                        <div className="info-item">
-                          <span className="info-label">Project ID:</span>
-                          <span className="info-value">{selectedProject.projectId}</span>
+                        <div className="section-header" onClick={() => setIsProjectInfoCollapsed(!isProjectInfoCollapsed)}>
+                          <h4 className="section-title">Project Information & Team Members</h4>
+                          <button className="collapse-toggle">
+                            {isProjectInfoCollapsed ? <FaChevronDown /> : <FaChevronUp />}
+                          </button>
                         </div>
-                        <div className="info-item">
-                          <span className="info-label">Start Date:</span>
-                          <span className="info-value">{selectedProject.startDate}</span>
-                        </div>
-                        <div className="info-item">
-                          <span className="info-label">End Date:</span>
-                          <span className="info-value">{selectedProject.endDate}</span>
-                        </div>
-                        <div className="info-item">
-                          <span className="info-label">Domain:</span>
-                          <span className="info-value">{selectedProject.domain}</span>
-                        </div>
-                        <div className="info-item">
-                          <span className="info-label">Company:</span>
-                          <span className="info-value">{selectedProject.company}</span>
-                        </div>
+                        
+                        {!isProjectInfoCollapsed && (
+                          <>
+                            <div className="info-item">
+                              <span className="info-label">Project ID:</span>
+                              <span className="info-value">{selectedProject.projectId}</span>
+                            </div>
+                            <div className="info-item">
+                              <span className="info-label">Start Date:</span>
+                              <span className="info-value">{selectedProject.startDate}</span>
+                            </div>
+                            <div className="info-item">
+                              <span className="info-label">End Date:</span>
+                              <span className="info-value">{selectedProject.endDate}</span>
+                            </div>
+                            <div className="info-item">
+                              <span className="info-label">Domain:</span>
+                              <span className="info-value">{selectedProject.domain}</span>
+                            </div>
+                            <div className="info-item">
+                              <span className="info-label">Company:</span>
+                              <span className="info-value">{selectedProject.company}</span>
+                            </div>
+                            
+                            <div className="team-members-grid">
+                              <div className="team-section">
+                                <h5 className="team-section-title">
+                                  <FaUsers className="team-icon" />
+                                  CSA Team ({selectedProject.csaMembers.length})
+                                </h5>
+                                <div className="team-members-list">
+                                  {selectedProject.csaMembers.map((member) => (
+                                    <div key={member.id} className="team-member-card">
+                                      <div className="member-avatar">{member.avatar}</div>
+                                      <div className="member-info">
+                                        <h6 className="member-name">{member.name}</h6>
+                                        <span className="member-role">{member.role}</span>
+                                        <span className="member-email">{member.email}</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div className="team-section">
+                                <h5 className="team-section-title">
+                                  <FaBuilding className="team-icon" />
+                                  Quadrant Team ({selectedProject.quadrantTeam.length})
+                                </h5>
+                                <div className="team-members-list">
+                                  {selectedProject.quadrantTeam.map((member) => (
+                                    <div key={member.id} className="team-member-card">
+                                      <div className="member-avatar">{member.avatar}</div>
+                                      <div className="member-info">
+                                        <h6 className="member-name">{member.name}</h6>
+                                        <span className="member-role">{member.role}</span>
+                                        <span className="member-email">{member.email}</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div className="team-section">
+                                <h5 className="team-section-title">
+                                  <FaHandshake className="team-icon" />
+                                  Client Team ({selectedProject.clientMembers.length})
+                                </h5>
+                                <div className="team-members-list">
+                                  {selectedProject.clientMembers.map((member) => (
+                                    <div key={member.id} className="team-member-card">
+                                      <div className="member-avatar">{member.avatar}</div>
+                                      <div className="member-info">
+                                        <h6 className="member-name">{member.name}</h6>
+                                        <span className="member-role">{member.role}</span>
+                                        <span className="member-email">{member.email}</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
 
-                      <div className="project-info-section">
-                        <h4 className="section-title">Team Members</h4>
-                        <div className="team-members-grid">
-                          <div className="team-section">
-                            <h5 className="team-section-title">
-                              <FaUsers className="team-icon" />
-                              CSA Team ({selectedProject.csaMembers.length})
-                            </h5>
-                            <div className="team-members-list">
-                              {selectedProject.csaMembers.map((member) => (
-                                <div key={member.id} className="team-member-card">
-                                  <div className="member-avatar">{member.avatar}</div>
-                                  <div className="member-info">
-                                    <h6 className="member-name">{member.name}</h6>
-                                    <span className="member-role">{member.role}</span>
-                                    <span className="member-email">{member.email}</span>
-                                  </div>
+                                                                   <div className="project-info-section">
+                        <h4 className="section-title">Project Timeline & Documents</h4>
+                        
+                        {/* Timeline Bar at Top */}
+                        <div className="timeline-bar">
+                          <div className="timeline-steps">
+                            {selectedProject.timeline.map((phase, index) => (
+                              <div key={phase.id} className={`timeline-step ${phase.status === 'in-progress' ? 'active' : phase.status === 'completed' ? 'completed' : 'pending'}`}>
+                                <div className="step-indicator">
+                                  {phase.status === 'completed' && <FaCheckDouble />}
+                                  {phase.status === 'in-progress' && <FaClock />}
+                                  {phase.status === 'pending' && <FaCircle />}
                                 </div>
-                              ))}
+                                <span className="step-label">{phase.phase}</span>
+                                {index < selectedProject.timeline.length - 1 && (
+                                  <div className="step-connector"></div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Two Panel Layout */}
+                        <div className="timeline-panels">
+                          {/* Left Panel - Documents */}
+                          <div className="documents-panel">
+                            <div className="panel-header">
+                              <h5 className="panel-title">Documents - {selectedProject.timeline.find(p => p.status === 'in-progress')?.phase || 'No Active Phase'}</h5>
+                              <button 
+                                className="add-document-btn"
+                                onClick={() => setShowDocumentUpload(!showDocumentUpload)}
+                              >
+                                <FaPlus />
+                                <span>Add</span>
+                                <FaChevronDown />
+                              </button>
+                            </div>
+                            
+                            {/* Document Upload Interface */}
+                            {showDocumentUpload && (
+                              <div className="document-upload-section">
+                                <div className="upload-header">
+                                  <h6>Upload Documents</h6>
+                                  <button 
+                                    className="close-upload-btn"
+                                    onClick={() => setShowDocumentUpload(false)}
+                                  >
+                                    <FaTimes />
+                                  </button>
+                                </div>
+                                
+                                <div className="file-input-container">
+                                  <input
+                                    type="file"
+                                    multiple
+                                    onChange={handleFileSelect}
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.png,.jpg,.jpeg"
+                                    className="file-input"
+                                    id="document-upload"
+                                  />
+                                  <label htmlFor="document-upload" className="file-input-label">
+                                    <FaPaperclip />
+                                    <span>Choose Files</span>
+                                  </label>
+                                </div>
+                                
+                                {uploadedFiles.length > 0 && (
+                                  <div className="uploaded-files">
+                                    <h6>Selected Files:</h6>
+                                    {uploadedFiles.map((file, index) => (
+                                      <div key={index} className="uploaded-file-item">
+                                        <span className="file-name">{file.name}</span>
+                                        <span className="file-size">({(file.size / (1024 * 1024)).toFixed(1)} MB)</span>
+                                        <button 
+                                          className="remove-file-btn"
+                                          onClick={() => removeUploadedFile(index)}
+                                        >
+                                          <FaTimes />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                
+                                <div className="upload-actions">
+                                  <button 
+                                    className="upload-btn"
+                                    onClick={handleDocumentUpload}
+                                    disabled={uploadedFiles.length === 0 || isUploading}
+                                  >
+                                    {isUploading ? 'Uploading...' : 'Upload Documents'}
+                                  </button>
+                                  <button 
+                                    className="cancel-upload-btn"
+                                    onClick={() => {
+                                      setShowDocumentUpload(false);
+                                      setUploadedFiles([]);
+                                    }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            
+                            <div className="documents-list">
+                                                              {selectedProject.timeline.find(p => p.status === 'in-progress')?.documents?.map((doc, index) => (
+                                  <div 
+                                    key={doc.id || index} 
+                                    className={`document-item ${selectedDocument?.id === doc.id ? 'selected' : ''}`}
+                                    onClick={() => handleDocumentSelect(doc)}
+                                  >
+                                    <div className="document-info">
+                                      <span className="document-name">{doc.name}</span>
+                                      <span className="document-status">Uploaded</span>
+                                    </div>
+                                    <span className="document-type">{doc.type.toUpperCase()}</span>
+                                  </div>
+                                )) || (
+                                <div className="no-documents">
+                                  <FaFileAlt className="no-docs-icon" />
+                                  <p>No documents uploaded yet for this phase</p>
+                                </div>
+                              )}
                             </div>
                           </div>
 
-                          <div className="team-section">
-                            <h5 className="team-section-title">
-                              <FaBuilding className="team-icon" />
-                              Quadrant Team ({selectedProject.quadrantTeam.length})
-                            </h5>
-                            <div className="team-members-list">
-                              {selectedProject.quadrantTeam.map((member) => (
-                                <div key={member.id} className="team-member-card">
-                                  <div className="member-avatar">{member.avatar}</div>
-                                  <div className="member-info">
-                                    <h6 className="member-name">{member.name}</h6>
-                                    <span className="member-role">{member.role}</span>
-                                    <span className="member-email">{member.email}</span>
+                          {/* Right Panel - Document Viewer */}
+                          <div className="document-viewer-panel">
+                            <div className="viewer-content">
+                              {selectedDocument ? (
+                                <div className="document-preview">
+                                  <div className="preview-header">
+                                    <h4>{selectedDocument.name}</h4>
+                                    <div className="document-meta">
+                                      <span className="file-type">{selectedDocument.type.toUpperCase()}</span>
+                                      <span className="file-size">{selectedDocument.size}</span>
+                                    </div>
+                                  </div>
+                                  <div className="preview-content">
+                                    {documentPreviewUrl ? (
+                                      <iframe
+                                        src={documentPreviewUrl}
+                                        title={selectedDocument.name}
+                                        className="document-iframe"
+                                        frameBorder="0"
+                                      />
+                                    ) : (
+                                      <div className="no-preview">
+                                        <div className="file-icon">📄</div>
+                                        <p className="file-name">{selectedDocument.name}</p>
+                                        <p className="file-info">Preview not available</p>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
-                              ))}
+                              ) : (
+                                <>
+                                  <div className="file-placeholder">FILE</div>
+                                  <div className="no-document-selected">
+                                    <p>No Document Selected</p>
+                                    <p>Select a document from the left panel to view its content</p>
+                                  </div>
+                                </>
+                              )}
                             </div>
-                          </div>
+                            {(() => {
+                              const currentPhase = selectedProject.timeline.find(p => p.status === 'in-progress');
+                              const nextPendingPhase = selectedProject.timeline.find(p => p.status === 'pending');
+                              
+                              if (currentPhase) {
+                                return (
+                                  <button className="complete-phase-btn" onClick={handlePhaseCompletionClick}>
+                                    <FaCheckDouble />
+                                    <span>Complete {currentPhase.phase} Phase</span>
+                                  </button>
+                                );
+                              } else if (nextPendingPhase) {
+                                return (
+                                  <button className="start-phase-btn" onClick={handleStartNextPhase}>
+                                    <FaPlay />
+                                    <span>Start {nextPendingPhase.phase} Phase</span>
+                                  </button>
+                                );
+                              }
+                              return null;
+                            })()}
 
-                          <div className="team-section">
-                            <h5 className="team-section-title">
-                              <FaHandshake className="team-icon" />
-                              Client Team ({selectedProject.clientMembers.length})
-                            </h5>
-                            <div className="team-members-list">
-                              {selectedProject.clientMembers.map((member) => (
-                                <div key={member.id} className="team-member-card">
-                                  <div className="member-avatar">{member.avatar}</div>
-                                  <div className="member-info">
-                                    <h6 className="member-name">{member.name}</h6>
-                                    <span className="member-role">{member.role}</span>
-                                    <span className="member-email">{member.email}</span>
+                            {/* Phase Completion Confirmation Modal */}
+                            {showPhaseConfirmation && (
+                              <div className="phase-confirmation-overlay" onClick={handleCancelPhaseCompletion}>
+                                <div className="phase-confirmation-modal" onClick={(e) => e.stopPropagation()}>
+                                  <div className="phase-confirmation-header">
+                                    <h3 className="phase-confirmation-title">Complete Phase</h3>
+                                    <button 
+                                      className="phase-confirmation-close-btn" 
+                                      onClick={handleCancelPhaseCompletion}
+                                    >
+                                      <FaTimes />
+                                    </button>
+                                  </div>
+                                  
+                                  <div className="phase-confirmation-content">
+                                    <div className="phase-confirmation-icon">
+                                      {selectedProject.timeline.find(p => p.phase === phaseToComplete)?.status === 'in-progress' ? (
+                                        <FaCheckDouble />
+                                      ) : (
+                                        <FaPlay />
+                                      )}
+                                    </div>
+                                    <h4 className="phase-confirmation-message">
+                                      {selectedProject.timeline.find(p => p.phase === phaseToComplete)?.status === 'in-progress' ? (
+                                        <>Are you sure you want to complete the <strong>{phaseToComplete}</strong> phase?</>
+                                      ) : (
+                                        <>Are you sure you want to start the <strong>{phaseToComplete}</strong> phase?</>
+                                      )}
+                                    </h4>
+                                    <p className="phase-confirmation-description">
+                                      {selectedProject.timeline.find(p => p.phase === phaseToComplete)?.status === 'in-progress' ? (
+                                        <>This action will mark the current phase as completed and move the project to the next phase. This action cannot be undone.</>
+                                      ) : (
+                                        <>This action will start the {phaseToComplete} phase and make it the active phase for the project.</>
+                                      )}
+                                    </p>
+                                  </div>
+                                  
+                                  <div className="phase-confirmation-footer">
+                                    <button 
+                                      className="phase-confirmation-cancel-btn" 
+                                      onClick={handleCancelPhaseCompletion}
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button 
+                                      className="phase-confirmation-confirm-btn" 
+                                      onClick={handleConfirmPhaseCompletion}
+                                    >
+                                      {selectedProject.timeline.find(p => p.phase === phaseToComplete)?.status === 'in-progress' ? 'Complete Phase' : 'Start Phase'}
+                                    </button>
                                   </div>
                                 </div>
-                              ))}
-                            </div>
+                              </div>
+                            )}
+                            
+                            {/* Phase Completion Success Notification */}
+                            {showPhaseSuccess && (
+                              <div className="phase-success-notification">
+                                <div className="success-icon">
+                                  <FaCheckDouble />
+                                </div>
+                                <div className="success-content">
+                                  <h4 className="success-title">
+                                    {selectedProject.timeline.find(p => p.phase === completedPhaseName)?.status === 'completed' ? 'Phase Completed!' : 'Phase Started!'}
+                                  </h4>
+                                  <p className="success-message">
+                                    {selectedProject.timeline.find(p => p.phase === completedPhaseName)?.status === 'completed' ? (
+                                      <>The <strong>{completedPhaseName}</strong> phase has been successfully completed and the project has moved to the next phase.</>
+                                    ) : (
+                                      <>The <strong>{completedPhaseName}</strong> phase has been successfully started and is now the active phase.</>
+                                    )}
+                                  </p>
+                                </div>
+                                <button 
+                                  className="success-close-btn" 
+                                  onClick={() => setShowPhaseSuccess(false)}
+                                >
+                                  <FaTimes />
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
-
-                                             <div className="project-info-section">
-                         <h4 className="section-title">Project Timeline & Documents</h4>
-                         <div className="timeline-container">
-                           <div className="timeline-track">
-                             {selectedProject.timeline.map((phase, index) => (
-                               <div key={phase.id} className="timeline-phase">
-                                 <div className="phase-indicator">
-                                   <div className={`phase-dot ${phase.status}`}>
-                                     {phase.status === 'completed' && <FaCheckDouble />}
-                                     {phase.status === 'in-progress' && <FaClock />}
-                                     {phase.status === 'pending' && <FaCircle />}
-                                   </div>
-                                   {index < selectedProject.timeline.length - 1 && (
-                                     <div className="phase-connector"></div>
-                                   )}
-                                 </div>
-                                 <div className="phase-content">
-                                   <div className="phase-header">
-                                     <h5 className="phase-title">{phase.phase}</h5>
-                                     <span className={`phase-status ${phase.status}`}>
-                                       {phase.status === 'completed' && 'Completed'}
-                                       {phase.status === 'in-progress' && 'In Progress'}
-                                       {phase.status === 'pending' && 'Pending'}
-                                     </span>
-                                   </div>
-                                   
-                                   <div className="phase-documents">
-                                     <div className="documents-header">
-                                       <FaFileAlt className="documents-icon" />
-                                       <span>Documents ({phase.documents.length})</span>
-                                     </div>
-                                     {phase.documents.length > 0 ? (
-                                       <div className="documents-grid">
-                                         {phase.documents.map((doc) => (
-                                           <div key={doc.id} className="document-card">
-                                             <div className="document-icon">
-                                               <FaFileAlt />
-                                             </div>
-                                             <div className="document-info">
-                                               <h6 className="document-name">{doc.name}</h6>
-                                               <div className="document-meta">
-                                                 <span className="document-type">{doc.type.toUpperCase()}</span>
-                                                 <span className="document-size">{doc.size}</span>
-                                               </div>
-                                               <div className="document-upload-info">
-                                                 <span className="uploaded-by">by {doc.uploadedBy}</span>
-                                                 <span className="uploaded-at">{doc.uploadedAt}</span>
-                                               </div>
-                                             </div>
-                                             <div className="document-actions">
-                                               <button className="action-btn" title="View">
-                                                 <FaEye />
-                                               </button>
-                                               <button className="action-btn" title="Download">
-                                                 <FaDownload />
-                                               </button>
-                                             </div>
-                                           </div>
-                                         ))}
-                                       </div>
-                                     ) : (
-                                       <div className="no-documents">
-                                         <FaFileAlt className="no-docs-icon" />
-                                         <p>No documents uploaded yet for this phase</p>
-                                       </div>
-                                     )}
-                                   </div>
-                                 </div>
-                               </div>
-                             ))}
-                           </div>
-                         </div>
-                       </div>
                     </div>
                   ) : (
                     <div className="placeholder-message">
@@ -2486,13 +2891,13 @@ function App() {
                       <div className="status-header">
                         <span className="status-label">New</span>
                         <span className="status-count">
-                          {projects.filter(p => p.status === 'New').length}
+                          {projects.filter(p => getProjectStatus(p) === 'New').length}
                         </span>
                       </div>
                       <div className="status-bar">
                         <div 
                           className="status-fill new" 
-                          style={{width: `${(projects.filter(p => p.status === 'New').length / projects.length) * 100}%`}}
+                          style={{width: `${(projects.filter(p => getProjectStatus(p) === 'New').length / projects.length) * 100}%`}}
                         ></div>
                       </div>
                     </div>
@@ -2501,13 +2906,12 @@ function App() {
                       <div className="status-header">
                         <span className="status-label">In Progress</span>
                         <span className="status-count">
-                          {projects.filter(p => p.status === 'In Progress').length}
+                          {projects.filter(p => getProjectStatus(p) === 'In Progress').length}
                         </span>
                       </div>
                       <div className="status-bar">
-                        <div 
-                          className="status-fill in-progress" 
-                          style={{width: `${(projects.filter(p => p.status === 'In Progress').length / projects.length) * 100}%`}}
+                        <div className="status-fill in-progress" 
+                          style={{width: `${(projects.filter(p => getProjectStatus(p) === 'In Progress').length / projects.length) * 100}%`}}
                         ></div>
                       </div>
                     </div>
@@ -2516,13 +2920,13 @@ function App() {
                       <div className="status-header">
                         <span className="status-label">Completed</span>
                         <span className="status-count">
-                          {projects.filter(p => p.status === 'Completed').length}
+                          {projects.filter(p => getProjectStatus(p) === 'Completed').length}
                         </span>
                       </div>
                       <div className="status-bar">
                         <div 
                           className="status-fill completed" 
-                          style={{width: `${(projects.filter(p => p.status === 'Completed').length / projects.length) * 100}%`}}
+                          style={{width: `${(projects.filter(p => getProjectStatus(p) === 'Completed').length / projects.length) * 100}%`}}
                         ></div>
                       </div>
                     </div>
