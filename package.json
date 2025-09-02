@@ -3,9 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "docx": "^9.5.1",
+    "mammoth": "^1.10.0",
+    "pdfjs-dist": "^5.4.54",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^5.5.0",
+    "react-markdown": "^10.1.0",
+    "react-pdf": "^10.1.0",
     "react-scripts": "5.0.1"
   },
   "scripts": {
