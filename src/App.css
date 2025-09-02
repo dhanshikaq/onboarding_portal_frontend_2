@@ -1786,6 +1786,46 @@ body {
   margin-bottom: 32px;
 }
 
+.pane-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.refresh-projects-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(0, 122, 255, 0.1);
+  border: 1px solid rgba(0, 122, 255, 0.3);
+  color: #007AFF;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+}
+
+.refresh-projects-btn:hover:not(:disabled) {
+  background: rgba(0, 122, 255, 0.2);
+  border-color: rgba(0, 122, 255, 0.5);
+  transform: scale(1.05);
+}
+
+.refresh-projects-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.refresh-projects-btn svg {
+  font-size: 16px;
+}
+
+.refresh-projects-btn svg.spinning {
+  animation: spin 1s linear infinite;
+}
+
 .pane-title {
   font-size: 24px;
   font-weight: 600;
@@ -1909,6 +1949,121 @@ body {
   margin: 0;
   line-height: 1.5;
   font-weight: 400;
+}
+
+/* Loading and Empty States */
+.loading-projects {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(0, 122, 255, 0.2);
+  border-top: 3px solid #007AFF;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-projects p {
+  font-size: 16px;
+  color: #8e8e93;
+  font-weight: 500;
+}
+
+.no-projects {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.no-projects p {
+  font-size: 18px;
+  color: #8e8e93;
+  font-weight: 500;
+  margin-bottom: 24px;
+}
+
+.create-first-project-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, #007AFF 0%, #5856D6 100%);
+  border: none;
+  color: #ffffff;
+  padding: 16px 24px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+  box-shadow: 0 4px 20px rgba(0, 122, 255, 0.3);
+}
+
+.create-first-project-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 122, 255, 0.4);
+}
+
+.create-first-project-btn svg {
+  font-size: 16px;
+}
+
+.projects-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.projects-error p {
+  font-size: 16px;
+  color: #ff6b6b;
+  font-weight: 500;
+  margin-bottom: 24px;
+}
+
+.retry-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 107, 107, 0.1);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  color: #ff6b6b;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+}
+
+.retry-btn:hover {
+  background: rgba(255, 107, 107, 0.2);
+  border-color: rgba(255, 107, 107, 0.5);
+  transform: translateY(-1px);
+}
+
+.retry-btn svg {
+  font-size: 14px;
 }
 
 /* Project Details Pane */

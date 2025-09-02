@@ -31,7 +31,8 @@ import {
   FaTrash,
   FaRobot,
   FaVolumeUp,
-  FaPlay
+  FaPlay,
+  FaSync
 } from 'react-icons/fa';
 import './App.css';
 import DocumentPreviewer from './components/DocumentPreviewer';
@@ -117,6 +118,8 @@ function App() {
   const [projectIds, setProjectIds] = useState({}); // Track project IDs for each chat - used to link conversations to projects
   const [userSessions, setUserSessions] = useState([]); // Store user sessions from API
   const [isLoadingSessions, setIsLoadingSessions] = useState(false); // Loading state for sessions
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false); // Loading state for projects
+  const [projectsError, setProjectsError] = useState(null); // Error state for projects
   
   // Document upload state
   const [showDocumentUpload, setShowDocumentUpload] = useState(false);
@@ -727,6 +730,76 @@ function App() {
     } finally {
       setIsLoadingSessions(false);
     }
+  };
+
+  const loadUserProjects = async () => {
+    if (!user?.user_id) return;
+    
+    setIsLoadingProjects(true);
+    setProjectsError(null);
+    try {
+      const response = await ApiService.getUserProjects(user.user_id);
+      
+      if (response.success && response.projects) {
+        // Transform the API response to match the expected project format
+        const transformedProjects = response.projects.map(project => ({
+          id: project.project_id,
+          title: project.project_name,
+          description: `${project.domain} project for ${project.company_name}`,
+          status: 'In Progress', // Default status since API doesn't provide it
+          projectId: `PROJ-${project.project_id.toString().padStart(3, '0')}`,
+          startDate: project.start_date,
+          endDate: project.end_date,
+          domain: project.domain,
+          company: project.company_name,
+          userRole: project.user_role,
+          companyId: project.company_id,
+          // Default team members structure (can be enhanced later)
+          csaMembers: [],
+          quadrantTeam: [],
+          clientMembers: [],
+          timeline: [
+            {
+              id: 1,
+              phase: 'Discovery Call',
+              status: 'completed',
+              documents: []
+            },
+            {
+              id: 2,
+              phase: 'Project Planning',
+              status: 'in-progress',
+              documents: []
+            },
+            {
+              id: 3,
+              phase: 'Design Phase',
+              status: 'pending',
+              documents: []
+            },
+            {
+              id: 4,
+              phase: 'Closure',
+              status: 'pending',
+              documents: []
+            }
+          ]
+        }));
+        
+        setProjects(transformedProjects);
+      }
+    } catch (error) {
+      console.error('Failed to load user projects:', error);
+      setProjectsError('Failed to load projects. Please try again.');
+      // Keep the existing sample projects as fallback
+    } finally {
+      setIsLoadingProjects(false);
+    }
+  };
+
+  const handleOpenPortal = async () => {
+    setShowPortal(true);
+    await loadUserProjects();
   };
 
   const handleSessionClick = async (session) => {
@@ -1970,7 +2043,7 @@ function App() {
                      <div className="sidebar-section">
              <h3 className="section-title">Quick Actions</h3>
              <div className="quick-actions-list">
-               <div className="quick-action-item" onClick={() => setShowPortal(true)}>
+               <div className="quick-action-item" onClick={handleOpenPortal}>
                  <span className="action-icon"><FaSignOutAlt /></span>
                  <span className="action-text">Take me to portal</span>
                </div>
@@ -2028,30 +2101,69 @@ function App() {
                 <div className="projects-pane">
                   <div className="pane-header">
                     <h2 className="pane-title">Projects</h2>
-                    <button 
-                      className="new-project-btn"
-                      onClick={() => setShowNewProjectForm(true)}
-                    >
-                      <FaPlusCircle />
-                      <span>Client Onboarding</span>
-                    </button>
+                    <div className="pane-actions">
+                      <button 
+                        className="refresh-projects-btn"
+                        onClick={loadUserProjects}
+                        disabled={isLoadingProjects}
+                        title="Refresh projects"
+                      >
+                        <FaSync className={isLoadingProjects ? 'spinning' : ''} />
+                      </button>
+                      <button 
+                        className="new-project-btn"
+                        onClick={() => setShowNewProjectForm(true)}
+                      >
+                        <FaPlusCircle />
+                        <span>Client Onboarding</span>
+                      </button>
+                    </div>
                   </div>
                   <div className="project-list">
-                    {projects.map((project) => (
-                      <div 
-                        key={project.id}
-                        className={`project-item ${selectedProject?.id === project.id ? 'selected' : ''}`}
-                        onClick={() => setSelectedProject(project)}
-                      >
-                        <div className="project-header">
-                          <h3 className="project-title">{project.title}</h3>
-                          <span className={`project-status ${getProjectStatus(project).toLowerCase().replace(' ', '-')}`}>
-                            {getProjectStatus(project)}
-                          </span>
-                        </div>
-                        <p className="project-description">{project.description}</p>
+                    {isLoadingProjects ? (
+                      <div className="loading-projects">
+                        <div className="loading-spinner"></div>
+                        <p>Loading projects...</p>
                       </div>
-                    ))}
+                    ) : projectsError ? (
+                      <div className="projects-error">
+                        <p>{projectsError}</p>
+                        <button 
+                          className="retry-btn"
+                          onClick={loadUserProjects}
+                        >
+                          <FaSync />
+                          <span>Retry</span>
+                        </button>
+                      </div>
+                    ) : projects.length > 0 ? (
+                      projects.map((project) => (
+                        <div 
+                          key={project.id}
+                          className={`project-item ${selectedProject?.id === project.id ? 'selected' : ''}`}
+                          onClick={() => setSelectedProject(project)}
+                        >
+                          <div className="project-header">
+                            <h3 className="project-title">{project.title}</h3>
+                            <span className={`project-status ${getProjectStatus(project).toLowerCase().replace(' ', '-')}`}>
+                              {getProjectStatus(project)}
+                            </span>
+                          </div>
+                          <p className="project-description">{project.description}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="no-projects">
+                        <p>No projects found</p>
+                        <button 
+                          className="create-first-project-btn"
+                          onClick={() => setShowNewProjectForm(true)}
+                        >
+                          <FaPlusCircle />
+                          <span>Create Your First Project</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
                 
@@ -2946,7 +3058,7 @@ function App() {
                      </button>
                      <button className="quick-action-btn" onClick={() => {
                        setShowDashboard(false);
-                       setShowPortal(true);
+                       handleOpenPortal();
                      }}>
                        <FaFolderOpen />
                        <span>View All Projects</span>
