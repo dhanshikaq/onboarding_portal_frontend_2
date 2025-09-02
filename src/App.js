@@ -29,15 +29,33 @@ import {
   FaCheckDouble,
   FaCircle,
   FaTrash,
-  FaRobot,
   FaVolumeUp,
-  FaPlay
+  FaPlay,
+  FaChevronLeft,
+  FaChevronRight
 } from 'react-icons/fa';
 import './App.css';
 import DocumentPreviewer from './components/DocumentPreviewer';
 import ApiService from './services/api';
 import MarkdownRenderer from './components/MarkdownRenderer';
 
+// Custom Quadra Logo Component
+const QuadraLogo = ({ className = "", size = 24 }) => {
+  return (
+    <div 
+      className={`quadra-logo-container ${className}`}
+      style={{
+        fontSize: `${size}px`,
+        width: 'auto',
+        height: 'auto'
+      }}
+    >
+      <div className="quadra-text-logo">
+        Quadra
+      </div>
+    </div>
+  );
+};
 
 function App() {
   const [formData, setFormData] = useState({
@@ -132,6 +150,10 @@ function App() {
   const [phaseToComplete, setPhaseToComplete] = useState(null);
   const [showPhaseSuccess, setShowPhaseSuccess] = useState(false);
   const [completedPhaseName, setCompletedPhaseName] = useState('');
+
+  // Sidebar visibility state - hidden by default for clean chat interface
+  const [isLeftSidebarVisible, setIsLeftSidebarVisible] = useState(false);
+  const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(false);
 
   // Close chat options dropdown when clicking outside
   React.useEffect(() => {
@@ -1728,6 +1750,15 @@ function App() {
     }
   };
 
+  // Sidebar toggle functions
+  const toggleLeftSidebar = () => {
+    setIsLeftSidebarVisible(!isLeftSidebarVisible);
+  };
+
+  const toggleRightSidebar = () => {
+    setIsRightSidebarVisible(!isRightSidebarVisible);
+  };
+
   // Function to calculate project status based on timeline
   const getProjectStatus = (project) => {
     if (!project.timeline || project.timeline.length === 0) {
@@ -1750,131 +1781,142 @@ function App() {
     return (
       <div className="chat-app">
         {/* Left Sidebar */}
-        <div className="chat-sidebar">
-          <div className="sidebar-header">
-            <div className="logo-section">
-              <img 
-                src={process.env.PUBLIC_URL + '/quadrant-logo.png'} 
-                alt="Company Logo" 
-                className="company-logo"
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                }}
-              />
-              <span className="logo-text">Quadra</span>
-            </div>
-          </div>
-          
-          <div className="sidebar-menu">
-            <div className="menu-item new-chat" onClick={createNewChat}>
-              <span className="menu-icon"><FaPlusCircle /></span>
-              <span>New chat</span>
-            </div>
-
-
-
-          </div>
-          
-
-          
-
-          
-          <div className="sidebar-section">
-            <h3 className="section-title">Recent Sessions</h3>
-            {isLoadingSessions ? (
-              <div className="sessions-loading">
-                <span>Loading sessions...</span>
+        {isLeftSidebarVisible && (
+          <div className="chat-sidebar">
+            <div className="sidebar-header">
+              <div className="logo-section">
+                <img 
+                  src={process.env.PUBLIC_URL + '/quadrant-logo.png'} 
+                  alt="Company Logo" 
+                  className="company-logo"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                  }}
+                />
+                <span className="logo-text">Quadra</span>
               </div>
-            ) : userSessions.length > 0 ? (
-              <div className="sessions-list">
-                {userSessions.map((session) => (
-                  <div 
-                    key={session.session_id} 
-                    className="session-item"
-                    onClick={() => handleSessionClick(session)}
-                  >
-                    <div className="session-header">
-                      <span className="session-project">{session.project_name}</span>
-                      <span className={`session-status ${session.is_active ? 'active' : 'inactive'}`}>
-                        {session.is_active ? 'Active' : 'Inactive'}
-                      </span>
+            </div>
+            
+            <div className="sidebar-menu">
+              <div className="menu-item new-chat" onClick={createNewChat}>
+                <span className="menu-icon"><FaPlusCircle /></span>
+                <span>New chat</span>
+              </div>
+            </div>
+            
+            <div className="sidebar-section">
+              <h3 className="section-title">Recent Sessions</h3>
+              {isLoadingSessions ? (
+                <div className="sessions-loading">
+                  <span>Loading sessions...</span>
+                </div>
+              ) : userSessions.length > 0 ? (
+                <div className="sessions-list">
+                  {userSessions.map((session) => (
+                    <div 
+                      key={session.session_id} 
+                      className="session-item"
+                      onClick={() => handleSessionClick(session)}
+                    >
+                      <div className="session-header">
+                        <span className="session-project">{session.project_name}</span>
+                        <span className={`session-status ${session.is_active ? 'active' : 'inactive'}`}>
+                          {session.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                      <div className="session-details">
+                        <span className="session-messages">{session.message_count} messages</span>
+                        <span className="session-time">
+                          {formatRelativeTime(new Date(session.last_activity))}
+                        </span>
+                      </div>
                     </div>
-                    <div className="session-details">
-                      <span className="session-messages">{session.message_count} messages</span>
-                      <span className="session-time">
-                        {formatRelativeTime(new Date(session.last_activity))}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-                
-              </div>
-            ) : (
-              <div className="sessions-empty">
-                <span>No recent sessions</span>
-              </div>
-            )}
-          </div>
-          
-          <div className="user-profile">
-            <div className="user-avatar">{userInitial}</div>
-            <div className="user-info">
-              <div className="user-name">{userName}</div>
-              <div className="user-status">{user ? user.tag : 'Online'}</div>
+                  ))}
+                </div>
+              ) : (
+                <div className="sessions-empty">
+                  <span>No recent sessions</span>
+                </div>
+              )}
             </div>
-            <div className="user-actions">
-              <button className="settings-btn" onClick={() => setShowSettings(true)}>
-                <FaCog />
-              </button>
-              <button className="logout-btn" onClick={handleLogout} title="Logout">
-                <FaSignOutAlt />
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        {/* Main Chat Area */}
-        <div className="chat-main">
-          <div className="chat-header">
-            <div className="chat-partner">
-              <div className="partner-avatar">{currentChat ? currentChat.avatar : 'A'}</div>
-              <div className="partner-info">
-                <div className="partner-name">{currentChat ? currentChat.name : 'Select a chat'}</div>
-                <div className="partner-status">{currentChat ? currentChat.preview : 'No chat selected'}</div>
+            
+            <div className="user-profile">
+              <div className="user-avatar">{userInitial}</div>
+              <div className="user-info">
+                <div className="user-name">{userName}</div>
+                <div className="user-status">{user ? user.tag : 'Online'}</div>
               </div>
-            </div>
-            <div className="header-actions">
-              <div className="chat-options-container">
-                <button 
-                  className="action-btn" 
-                  onClick={() => setShowChatOptions(!showChatOptions)}
-                >
-                  <FaEllipsisH />
+              <div className="user-actions">
+                <button className="settings-btn" onClick={() => setShowSettings(true)}>
+                  <FaCog />
                 </button>
-                
-                {showChatOptions && (
-                  <div className="chat-options-dropdown">
-
-                    <div className="dropdown-item" onClick={saveChatAsPDF}>
-                      <FaFileAlt />
-                      <span>Save this chat as PDF</span>
-                    </div>
-                    <div className="dropdown-item delete-option" onClick={deleteCurrentChat}>
-                      <FaTrash />
-                      <span>Delete chat</span>
-                    </div>
-                  </div>
-                )}
+                <button className="logout-btn" onClick={handleLogout} title="Logout">
+                  <FaSignOutAlt />
+                </button>
               </div>
             </div>
           </div>
+        )}
+
+        {/* Left Sidebar Toggle Button */}
+        <button 
+          className={`sidebar-toggle-btn left-toggle ${isLeftSidebarVisible ? 'sidebar-visible' : 'sidebar-hidden'}`}
+          onClick={toggleLeftSidebar}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggleLeftSidebar();
+            }
+          }}
+          title={isLeftSidebarVisible ? 'Hide left sidebar' : 'Show left sidebar'}
+          aria-label={isLeftSidebarVisible ? 'Hide left sidebar' : 'Show left sidebar'}
+        >
+          <FaChevronRight />
+        </button>
+
+        {/* Main Chat Area */}
+        <div className={`chat-main ${!isLeftSidebarVisible ? 'expanded-left' : ''} ${!isRightSidebarVisible ? 'expanded-right' : ''} ${messages.length === 0 ? 'no-messages' : ''}`}>
+          {/* Only show chat header when there are messages or user is typing */}
+          {(messages.length > 0 || inputMessage.trim()) && (
+            <div className="chat-header">
+              <div className="chat-partner">
+                <div className="partner-avatar">{currentChat ? currentChat.avatar : 'A'}</div>
+                <div className="partner-info">
+                  <div className="partner-name">{currentChat ? currentChat.name : 'Select a chat'}</div>
+                  <div className="partner-status">{currentChat ? currentChat.preview : 'No chat selected'}</div>
+                </div>
+              </div>
+              <div className="header-actions">
+                <div className="chat-options-container">
+                  <button 
+                    className="action-btn" 
+                    onClick={() => setShowChatOptions(!showChatOptions)}
+                  >
+                    <FaEllipsisH />
+                  </button>
+                  
+                  {showChatOptions && (
+                    <div className="chat-options-dropdown">
+
+                      <div className="dropdown-item" onClick={saveChatAsPDF}>
+                        <FaFileAlt />
+                        <span>Save this chat as PDF</span>
+                      </div>
+                      <div className="dropdown-item delete-option" onClick={deleteCurrentChat}>
+                        <FaTrash />
+                        <span>Delete chat</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           
           <div className="chat-messages">
             {messages.length === 0 ? (
               <div className="welcome-placeholder">
-                <div className="placeholder-icon">
-                  <FaRobot />
-                </div>
+                <QuadraLogo size={64} />
                 <h2 className="placeholder-title">Where should we begin?</h2>
                 <p className="placeholder-subtitle">Start a new conversation by typing in the input box below</p>
               </div>
@@ -1937,12 +1979,6 @@ function App() {
                 className="chat-input"
               />
               <div className="input-right-actions">
-                <button type="button" className="action-button">
-                  <FaMicrophone />
-                </button>
-                <button type="button" className="action-button">
-                  <FaVolumeUp />
-                </button>
                 <button type="submit" className="action-button send-button">
                   <FaPaperPlane />
                 </button>
@@ -1966,33 +2002,47 @@ function App() {
         )}
         
         {/* Right Sidebar */}
-        <div className="chat-right-sidebar">
-                     <div className="sidebar-section">
-             <h3 className="section-title">Quick Actions</h3>
-             <div className="quick-actions-list">
-               <div className="quick-action-item" onClick={() => setShowPortal(true)}>
-                 <span className="action-icon"><FaSignOutAlt /></span>
-                 <span className="action-text">Take me to portal</span>
-               </div>
-               <div className="quick-action-item">
-                 <span className="action-icon"><FaClipboardList /></span>
-                 <span className="action-text">Current projects</span>
-               </div>
-               <div className="quick-action-item">
-                 <span className="action-icon"><FaFolder /></span>
-                 <span className="action-text">Projects archive</span>
-               </div>
-               <div className="quick-action-item" onClick={() => setShowDashboard(true)}>
-                 <span className="action-icon"><FaChartBar /></span>
-                 <span className="action-text">Dashboard</span>
-               </div>
-             </div>
-           </div>
+        {isRightSidebarVisible && (
+          <div className="chat-right-sidebar">
+            <div className="sidebar-section">
+              <h3 className="section-title">Quick Actions</h3>
+              <div className="quick-actions-list">
+                <div className="quick-action-item" onClick={() => setShowPortal(true)}>
+                  <span className="action-icon"><FaSignOutAlt /></span>
+                  <span className="action-text">Take me to portal</span>
+                </div>
+                <div className="quick-action-item">
+                  <span className="action-icon"><FaClipboardList /></span>
+                  <span className="action-text">Current projects</span>
+                </div>
+                <div className="quick-action-item">
+                  <span className="action-icon"><FaFolder /></span>
+                  <span className="action-text">Projects archive</span>
+                </div>
+                <div className="quick-action-item" onClick={() => setShowDashboard(true)}>
+                  <span className="action-icon"><FaChartBar /></span>
+                  <span className="action-text">Dashboard</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
-
-          
-
-        </div>
+        {/* Right Sidebar Toggle Button */}
+        <button 
+          className={`sidebar-toggle-btn right-toggle ${isRightSidebarVisible ? 'sidebar-visible' : 'sidebar-hidden'}`}
+          onClick={toggleRightSidebar}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggleRightSidebar();
+            }
+          }}
+          title={isRightSidebarVisible ? 'Hide right sidebar' : 'Show right sidebar'}
+          aria-label={isRightSidebarVisible ? 'Hide right sidebar' : 'Show right sidebar'}
+        >
+          <FaChevronLeft />
+        </button>
         
         {/* Portal Screen */}
         {showPortal && (
@@ -2436,9 +2486,7 @@ function App() {
                     </div>
                   ) : (
                     <div className="placeholder-message">
-                      <div className="placeholder-icon">
-                        <FaFolder />
-                      </div>
+                      <FaFolder />
                       <h3 className="placeholder-title">Select a project from the left pane to view details</h3>
                       <p className="placeholder-subtitle">Choose any project to see comprehensive information, timelines, and progress updates</p>
                     </div>
