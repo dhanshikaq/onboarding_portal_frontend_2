@@ -169,6 +169,15 @@ function App() {
     };
   }, [showChatOptions]);
 
+  // Auto-resize textarea when inputMessage changes
+  React.useEffect(() => {
+    const textarea = document.querySelector('.chat-input');
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+    }
+  }, [inputMessage]);
+
   // Close document upload when clicking outside
   React.useEffect(() => {
     const handleClickOutside = (event) => {
@@ -919,6 +928,12 @@ function App() {
         isBot: false,
         timestamp: new Date()
       };
+      
+      // Reset textarea height
+      const textarea = document.querySelector('.chat-input');
+      if (textarea) {
+        textarea.style.height = 'auto';
+      }
       
       // Check if this is the Quadra trigger prompt (with and without space before POC)
       const quadraTriggerPrompt1 = "Create a project Agentic AI Platform with quadrant email id as sahil.d@quadranttechnologies.com , dhanshika.v@quadranttechnologies.com CSA as abc@microsft.com and client with xyz@email.com and qwerty@email.com (POC)";
@@ -1971,12 +1986,24 @@ function App() {
               <div className="input-actions">
                 <button type="button" className="action-button plus-button"><FaPlus /></button>
               </div>
-              <input
-                type="text"
+              <textarea
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="Ask anything"
+                placeholder="ask quadra anything..."
                 className="chat-input"
+                rows="1"
+                onInput={(e) => {
+                  // Auto-resize the textarea
+                  e.target.style.height = 'auto';
+                  e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                }}
+                onKeyDown={(e) => {
+                  // Allow Enter to send message, Shift+Enter for new line
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage(e);
+                  }
+                }}
               />
               <div className="input-right-actions">
                 <button type="submit" className="action-button send-button">
@@ -3110,8 +3137,11 @@ function App() {
       <div className="login-container">
         <div className="login-card">
           <div className="welcome-section">
-            <h1 className="welcome-title">Welcome back</h1>
-            <p className="welcome-subtitle">Sign in to continue to your portal</p>
+            <div className="quadra-logo">
+              <h2 className="logo-text">Quadra</h2>
+            </div>
+            <h1 className="welcome-title">WELCOME</h1>
+            <p className="welcome-subtitle">Sign in to continue into Quadra</p>
           </div>
           
           <form className="login-form" onSubmit={handleSubmit}>
@@ -3161,7 +3191,7 @@ function App() {
             </div>
 
             <button type="submit" className="login-button" disabled={isLoading}>
-              {isLoading ? 'Signing In...' : 'Sign In'}
+              {isLoading ? 'Logging In...' : 'Login In'}
             </button>
           </form>
 
