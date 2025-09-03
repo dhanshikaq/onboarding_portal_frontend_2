@@ -1,6 +1,24 @@
 import React, { useState, useRef } from 'react';
-import { FaRobot, FaPaperclip, FaDownload } from 'react-icons/fa';
+import { FaPaperclip, FaDownload } from 'react-icons/fa';
 import './Quadra.css';
+
+// Custom Quadra Logo Component
+const QuadraLogo = ({ className = "", size = 24 }) => {
+  return (
+    <div 
+      className={`quadra-logo-container ${className}`}
+      style={{
+        fontSize: `${size}px`,
+        width: 'auto',
+        height: 'auto'
+      }}
+    >
+      <div className="quadra-text-logo">
+        Quadra
+      </div>
+    </div>
+  );
+};
 
 const Quadra = ({ onClose }) => {
   const [messages, setMessages] = useState([
@@ -232,7 +250,7 @@ const Quadra = ({ onClose }) => {
     <div className="quadra-container">
       <div className="quadra-header">
         <div className="quadra-title">
-          <FaRobot className="quadra-icon" />
+          <QuadraLogo className="quadra-icon" />
           <span>Quadra</span>
         </div>
         <button className="quadra-close" onClick={onClose}>
@@ -245,7 +263,7 @@ const Quadra = ({ onClose }) => {
           <div key={message.id} className={`quadra-message ${message.isBot ? 'bot' : 'user'}`}>
             {message.isBot && (
               <div className="quadra-avatar">
-                <FaRobot />
+                <QuadraLogo className="quadra-icon" />
               </div>
             )}
             <div className="quadra-message-content">
