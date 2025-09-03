@@ -229,6 +229,52 @@ class ApiService {
       throw error;
     }
   }
+
+  /**
+   * Get user projects from PostgreSQL
+   * @param {number} userId - User ID to get projects for
+   * @returns {Promise<Object>} Response with format:
+   * {
+   *   success: boolean,
+   *   user: {
+   *     user_id: number,
+   *     name: string,
+   *     email: string,
+   *     tag: string
+   *   },
+   *   projects: Array<{
+   *     project_id: number,
+   *     project_name: string,
+   *     start_date: string,
+   *     end_date: string,
+   *     domain: string,
+   *     company_name: string,
+   *     user_role: string,
+   *     company_id: number
+   *   }>,
+   *   count: number
+   * }
+   */
+  static async getUserProjects(userId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/projects/user/${userId}/`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to get user projects');
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 export default ApiService;
