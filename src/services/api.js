@@ -275,6 +275,98 @@ class ApiService {
       throw error;
     }
   }
+
+  /**
+   * Delete a project
+   * @param {number} projectId - Project ID to delete
+   * @returns {Promise<Object>} Response with format:
+   * {
+   *   success: boolean,
+   *   message: string
+   * }
+   */
+  static async deleteProject(projectId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/projects/delete/${projectId}/`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to delete project');
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Generate a chat summary for a specific session
+   * @param {number} sessionId - Session ID to generate summary for
+   * @returns {Promise<Object>} Response with format:
+   * {
+   *   success: boolean,
+   *   summary: string,
+   *   session_id: number
+   * }
+   */
+  static async generateChatSummary(sessionId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/chatbot/summary/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionId
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to generate chat summary');
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Rename a chat session
+   * @param {number} sessionId - Session ID to rename
+   * @param {string} chatName - New chat name
+   * @returns {Promise<Object>} { success, session_id, chat_name }
+   */
+  static async renameChatSession(sessionId, chatName) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/chatbot/rename/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ session_id: sessionId, chat_name: chatName })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || data.error || 'Failed to rename chat');
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 export default ApiService;

@@ -32,12 +32,17 @@ import {
   FaVolumeUp,
   FaPlay,
   FaChevronLeft,
-  FaChevronRight
+  FaChevronRight,
+  FaSync,
+  FaArchive,
+  FaUndo,
+  FaImage
 } from 'react-icons/fa';
 import './App.css';
 import DocumentPreviewer from './components/DocumentPreviewer';
 import ApiService from './services/api';
 import MarkdownRenderer from './components/MarkdownRenderer';
+import Notification from './components/Notification';
 
 // Custom Quadra Logo Component
 const QuadraLogo = ({ className = "", size = 24 }) => {
@@ -137,6 +142,12 @@ function App() {
   const [isLoadingSessions, setIsLoadingSessions] = useState(false); // Loading state for sessions
   const [isLoadingProjects, setIsLoadingProjects] = useState(false); // Loading state for projects
   const [projectsError, setProjectsError] = useState(null); // Error state for projects
+  // Session rename state
+  const [renamingSessionId, setRenamingSessionId] = useState(null);
+  const [tempChatName, setTempChatName] = useState('');
+  // Chat header rename state
+  const [isRenamingChatHeader, setIsRenamingChatHeader] = useState(false);
+  const [tempHeaderName, setTempHeaderName] = useState('');
   
   // Document upload state
   const [showDocumentUpload, setShowDocumentUpload] = useState(false);
@@ -146,6 +157,11 @@ function App() {
   // Document preview state
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [documentPreviewUrl, setDocumentPreviewUrl] = useState(null);
+  
+  // Delete project confirmation state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState(null);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
 
   // Phase completion confirmation state
   const [showPhaseConfirmation, setShowPhaseConfirmation] = useState(false);
@@ -156,6 +172,197 @@ function App() {
   // Sidebar visibility state - hidden by default for clean chat interface
   const [isLeftSidebarVisible, setIsLeftSidebarVisible] = useState(false);
   const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(false);
+
+  // Archived chats state
+  const [archivedChats, setArchivedChats] = useState([]);
+  const [showArchivedChats, setShowArchivedChats] = useState(false);
+
+  // Upload options state
+  const [showUploadOptions, setShowUploadOptions] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+
+  // Notification state
+  const [notifications, setNotifications] = useState([]);
+
+  // Notification functions
+  const showNotification = (message, type = 'info', duration = 5000) => {
+    const id = Date.now() + Math.random();
+    const newNotification = { id, message, type, duration };
+    setNotifications(prev => [...prev, newNotification]);
+  };
+
+  const removeNotification = (id) => {
+    setNotifications(prev => prev.filter(notification => notification.id !== id));
+  };
+
+  const showConfirmDialog = (message, onConfirm, onCancel) => {
+    const id = Date.now() + Math.random();
+    const confirmNotification = {
+      id,
+      type: 'confirm',
+      message,
+      onConfirm: () => {
+        removeNotification(id);
+        if (onConfirm) onConfirm();
+      },
+      onCancel: () => {
+        removeNotification(id);
+        if (onCancel) onCancel();
+      }
+    };
+    setNotifications(prev => [...prev, confirmNotification]);
+  };
+
+  // Archived chats functions
+  const openArchivedChats = () => {
+    setShowArchivedChats(true);
+  };
+
+  const closeArchivedChats = () => {
+    setShowArchivedChats(false);
+  };
+
+  const restoreArchivedChat = (archivedChat) => {
+    // Remove archivedAt property and add back to active chats
+    const { archivedAt, ...chatToRestore } = archivedChat;
+    const restoredChat = { ...chatToRestore, isActive: false };
+    
+    setChats(prev => [...prev, restoredChat]);
+    setArchivedChats(prev => prev.filter(chat => chat.id !== archivedChat.id));
+    
+    showNotification(`Chat "${archivedChat.name}" has been restored`, 'success');
+  };
+
+  const deleteArchivedChat = (archivedChat) => {
+    showConfirmDialog(
+      `Are you sure you want to permanently delete "${archivedChat.name}"?`,
+      () => {
+        setArchivedChats(prev => prev.filter(chat => chat.id !== archivedChat.id));
+        showNotification(`Chat "${archivedChat.name}" has been permanently deleted`, 'info');
+      }
+    );
+  };
+
+  // Upload functions
+  const toggleUploadOptions = () => {
+    setShowUploadOptions(!showUploadOptions);
+  };
+
+  const handleFileUpload = (event) => {
+    const files = Array.from(event.target.files);
+    setSelectedFiles(prev => [...prev, ...files]);
+    
+    // Add files as messages to the current chat
+    const fileMessages = files.map(file => ({
+      id: Date.now() + Math.random(),
+      text: `Uploaded: ${file.name}`,
+      isBot: false,
+      timestamp: new Date(),
+      type: 'file',
+      fileName: file.name,
+      fileSize: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+      file: file
+    }));
+
+    // Add file messages to current chat
+    const updatedChats = chats.map(chat => {
+      if (chat.id === currentChatId) {
+        return {
+          ...chat,
+          messages: [...chat.messages, ...fileMessages]
+        };
+      }
+      return chat;
+    });
+
+    setChats(updatedChats);
+    setShowUploadOptions(false);
+    showNotification(`${files.length} file(s) uploaded successfully`, 'success');
+  };
+
+  const handleImageUpload = (event) => {
+    const files = Array.from(event.target.files).filter(file => 
+      file.type.startsWith('image/')
+    );
+    
+    if (files.length === 0) {
+      showNotification('Please select image files only', 'warning');
+      return;
+    }
+
+    setSelectedFiles(prev => [...prev, ...files]);
+    
+    // Add images as messages to the current chat
+    const imageMessages = files.map(file => ({
+      id: Date.now() + Math.random(),
+      text: `Image uploaded: ${file.name}`,
+      isBot: false,
+      timestamp: new Date(),
+      type: 'image',
+      fileName: file.name,
+      fileSize: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+      file: file,
+      imageUrl: URL.createObjectURL(file)
+    }));
+
+    // Add image messages to current chat
+    const updatedChats = chats.map(chat => {
+      if (chat.id === currentChatId) {
+        return {
+          ...chat,
+          messages: [...chat.messages, ...imageMessages]
+        };
+      }
+      return chat;
+    });
+
+    setChats(updatedChats);
+    setShowUploadOptions(false);
+    showNotification(`${files.length} image(s) uploaded successfully`, 'success');
+  };
+
+  const handleChatDocumentUpload = (event) => {
+    const files = Array.from(event.target.files).filter(file => 
+      file.type.includes('pdf') || 
+      file.type.includes('doc') || 
+      file.type.includes('docx') ||
+      file.type.includes('txt')
+    );
+    
+    if (files.length === 0) {
+      showNotification('Please select document files (PDF, DOC, DOCX, TXT)', 'warning');
+      return;
+    }
+
+    setSelectedFiles(prev => [...prev, ...files]);
+    
+    // Add documents as messages to the current chat
+    const documentMessages = files.map(file => ({
+      id: Date.now() + Math.random(),
+      text: `Document uploaded: ${file.name}`,
+      isBot: false,
+      timestamp: new Date(),
+      type: 'document',
+      fileName: file.name,
+      fileSize: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+      file: file
+    }));
+
+    // Add document messages to current chat
+    const updatedChats = chats.map(chat => {
+      if (chat.id === currentChatId) {
+        return {
+          ...chat,
+          messages: [...chat.messages, ...documentMessages]
+        };
+      }
+      return chat;
+    });
+
+    setChats(updatedChats);
+    setShowUploadOptions(false);
+    showNotification(`${files.length} document(s) uploaded successfully`, 'success');
+  };
 
   // Close chat options dropdown when clicking outside
   React.useEffect(() => {
@@ -194,6 +401,20 @@ function App() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showDocumentUpload]);
+
+  // Close upload options dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showUploadOptions && !event.target.closest('.upload-options-container')) {
+        setShowUploadOptions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUploadOptions]);
 
   // Cleanup preview URLs when component unmounts or document changes
   React.useEffect(() => {
@@ -298,157 +519,8 @@ function App() {
     { name: 'Digital Dynamics', industry: 'Marketing' }
   ];
 
-  // Sample projects data
-  const [projects, setProjects] = useState([
-    {
-      id: 1,
-      title: 'E-commerce Platform',
-      description: 'Web Development project for New Tech Corp',
-      status: 'In Progress',
-      projectId: 'PROJ-005',
-      startDate: '2024-01-15',
-      endDate: '2024-06-15',
-      domain: 'Web Development',
-      company: 'New Tech Corp',
-      csaMembers: [
-        { id: 1, name: 'Anirudh Venkataraman', role: 'CSA Lead', email: 'anirudh@quadrant.com', avatar: 'AV' },
-        { id: 2, name: 'Dhanshika Vijayaraj', role: 'CSA Associate', email: 'dhanshika@quadrant.com', avatar: 'DV' }
-      ],
-      quadrantTeam: [
-        { id: 3, name: 'Alex Johnson', role: 'Project Manager', email: 'alex@quadrant.com', avatar: 'AJ' },
-        { id: 4, name: 'Sarah Chen', role: 'Senior Developer', email: 'sarah@quadrant.com', avatar: 'SC' },
-        { id: 5, name: 'Mike Rodriguez', role: 'UI/UX Designer', email: 'mike@quadrant.com', avatar: 'MR' }
-      ],
-      clientMembers: [
-        { id: 6, name: 'David Kim', role: 'CTO', email: 'david@newtechcorp.com', avatar: 'DK' },
-        { id: 7, name: 'Lisa Wang', role: 'Product Manager', email: 'lisa@newtechcorp.com', avatar: 'LW' }
-      ],
-      timeline: [
-        {
-          id: 1,
-          phase: 'Discovery Call',
-          status: 'completed',
-          documents: [
-            { id: 1, name: 'Discovery Call Notes.pdf', type: 'pdf', size: '2.3 MB', uploadedBy: 'Anirudh Venkataraman', uploadedAt: '2024-01-15' },
-            { id: 2, name: 'Requirements Document.docx', type: 'docx', size: '1.8 MB', uploadedBy: 'David Kim', uploadedAt: '2024-01-16' }
-          ]
-        },
-        {
-          id: 2,
-          phase: 'Project Planning',
-          status: 'in-progress',
-          documents: [
-            { id: 3, name: 'Project Plan.pdf', type: 'pdf', size: '3.1 MB', uploadedBy: 'Alex Johnson', uploadedAt: '2024-01-20' },
-            { id: 4, name: 'Timeline.xlsx', type: 'xlsx', size: '0.9 MB', uploadedBy: 'Sarah Chen', uploadedAt: '2024-01-21' }
-          ]
-        },
-        {
-          id: 3,
-          phase: 'Design Phase',
-          status: 'pending',
-          documents: []
-        },
-        {
-          id: 4,
-          phase: 'Closure',
-          status: 'pending',
-          documents: []
-        }
-      ]
-    },
-    {
-      id: 2,
-      title: 'E-commerce Platform',
-      description: 'Web Development project for New Amazonian corps',
-      status: 'In Progress',
-      projectId: 'PROJ-006',
-      startDate: '2024-02-01',
-      endDate: '2024-07-01',
-      domain: 'Web Development',
-      company: 'New Amazonian corps',
-      csaMembers: [
-        { id: 8, name: 'Anirudh Venkataraman', role: 'CSA Lead', email: 'anirudh@quadrant.com', avatar: 'AV' }
-      ],
-      quadrantTeam: [
-        { id: 9, name: 'Tom Wilson', role: 'Project Manager', email: 'tom@quadrant.com', avatar: 'TW' }
-      ],
-      clientMembers: [
-        { id: 10, name: 'Emma Thompson', role: 'CEO', email: 'emma@amazonian.com', avatar: 'ET' }
-      ],
-      timeline: [
-        {
-          id: 1,
-          phase: 'Discovery Call',
-          status: 'completed',
-          documents: []
-        },
-        {
-          id: 2,
-          phase: 'Project Planning',
-          status: 'in-progress',
-          documents: []
-        },
-        {
-          id: 3,
-          phase: 'Design Phase',
-          status: 'pending',
-          documents: []
-        },
-        {
-          id: 4,
-          phase: 'Closure',
-          status: 'pending',
-          documents: []
-        }
-      ]
-    },
-    {
-      id: 3,
-      title: 'Full-Stack E-commerce Platform',
-      description: 'E-commerce & Web Development project for Comprehensive Tech Solutions',
-      status: 'In Progress',
-      projectId: 'PROJ-007',
-      startDate: '2024-01-20',
-      endDate: '2024-08-20',
-      domain: 'E-commerce & Web Development',
-      company: 'Comprehensive Tech Solutions',
-      csaMembers: [
-        { id: 11, name: 'Dhanshika Vijayaraj', role: 'CSA Associate', email: 'dhanshika@quadrant.com', avatar: 'DV' }
-      ],
-      quadrantTeam: [
-        { id: 12, name: 'Chris Lee', role: 'Project Manager', email: 'chris@quadrant.com', avatar: 'CL' }
-      ],
-      clientMembers: [
-        { id: 13, name: 'Rachel Green', role: 'CTO', email: 'rachel@comprehensive.com', avatar: 'RG' }
-      ],
-      timeline: [
-        {
-          id: 1,
-          phase: 'Discovery Call',
-          status: 'completed',
-          documents: []
-        },
-        {
-          id: 2,
-          phase: 'Project Planning',
-          status: 'pending',
-          documents: []
-        },
-        {
-          id: 3,
-          phase: 'Design Phase',
-          status: 'pending',
-          documents: []
-        },
-        {
-          id: 4,
-          phase: 'Closure',
-          status: 'pending',
-          documents: []
-        }
-      ]
-    }
-  ]);
+  // Projects populated from backend
+  const [projects, setProjects] = useState([]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -614,12 +686,12 @@ function App() {
       setSelectedProject(newProject);
       
       // Show success message
-      alert(`Project "${onboardingData.projectName}" created successfully!`);
+      showNotification(`Project "${onboardingData.projectName}" created successfully!`, 'success');
       
       handleCloseOnboarding();
     } catch (error) {
       console.error('Project creation error:', error);
-      alert(`Failed to create project: ${error.message}`);
+      showNotification(`Failed to create project: ${error.message}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -832,6 +904,45 @@ function App() {
     await loadUserProjects();
   };
 
+  const handleDeleteProject = (project) => {
+    setProjectToDelete(project);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!projectToDelete) return;
+    
+    setIsDeletingProject(true);
+    try {
+      await ApiService.deleteProject(projectToDelete.id);
+      
+      // Remove the project from the projects list
+      setProjects(prevProjects => 
+        prevProjects.filter(project => project.id !== projectToDelete.id)
+      );
+      
+      // If the deleted project was selected, clear selection
+      if (selectedProject?.id === projectToDelete.id) {
+        setSelectedProject(null);
+      }
+      
+      // Close the confirmation modal
+      setShowDeleteConfirm(false);
+      setProjectToDelete(null);
+      
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+      alert('Failed to delete project. Please try again.');
+    } finally {
+      setIsDeletingProject(false);
+    }
+  };
+
+  const cancelDeleteProject = () => {
+    setShowDeleteConfirm(false);
+    setProjectToDelete(null);
+  };
+
   const handleSessionClick = async (session) => {
     // Move the clicked session to the top of the Recent Sessions list
     setUserSessions(prev => {
@@ -855,7 +966,7 @@ function App() {
       // Create initial chat structure
       const newChat = {
         id: newChatId,
-        name: session.project_name || `Session ${session.session_id}`,
+        name: session.chat_name || session.project_name || `Session ${session.session_id}`,
         preview: `${session.message_count} messages`,
         avatar: String.fromCharCode(65 + (newChatId - 1) % 26), // A, B, C, etc.
         messages: [
@@ -957,10 +1068,12 @@ function App() {
 
   const deleteChat = (chatId) => {
     if (chats.length <= 1) {
-      alert('Cannot delete the last chat. At least one chat must remain.');
+      showNotification('Cannot delete the last chat. At least one chat must remain.', 'warning');
       return;
     }
     
+    // Capture session id before we clean mappings
+    const sid = sessionIds[chatId];
     const updatedChats = chats.filter(chat => chat.id !== chatId);
     
     // Clean up session_id, project_id and conversation state for deleted chat
@@ -981,6 +1094,11 @@ function App() {
       delete newConversationStates[chatId];
       return newConversationStates;
     });
+    
+    // Remove the associated session from UI list so it's hidden for this user
+    if (sid) {
+      setUserSessions(prev => prev.filter(s => s.session_id !== sid));
+    }
     
     // If we're deleting the current chat, switch to the first available chat
     if (chatId === currentChatId) {
@@ -1221,6 +1339,23 @@ function App() {
             [currentChatId]: response.session_id
           }));
           
+          // Try to update chat summary after message is sent
+          try {
+            const summaryResponse = await ApiService.generateChatSummary(response.session_id);
+            if (summaryResponse.success && summaryResponse.summary) {
+              // Update the chat name with the new summary
+              setChats(prevChats => 
+                prevChats.map(chat => 
+                  chat.id === currentChatId 
+                    ? { ...chat, name: summaryResponse.summary }
+                    : chat
+                )
+              );
+            }
+          } catch (error) {
+            console.warn('Failed to update chat summary:', error);
+          }
+          
           // Refresh user sessions to get updated session data
           loadUserSessions();
         }
@@ -1327,18 +1462,129 @@ function App() {
 
 
 
+  const generateChatSummary = async () => {
+    if (!currentChatId || !sessionIds[currentChatId]) {
+      alert('No active session to generate summary for');
+      return;
+    }
+    
+    try {
+      const response = await ApiService.generateChatSummary(sessionIds[currentChatId]);
+      if (response.success && response.summary) {
+        // Update the chat name with the new summary
+        setChats(prevChats => 
+          prevChats.map(chat => 
+            chat.id === currentChatId 
+              ? { ...chat, name: response.summary }
+              : chat
+          )
+        );
+        
+        // Show success notification
+        showNotification(`Chat summary generated: "${response.summary}"`, 'success');
+      } else {
+        showNotification('Failed to generate chat summary', 'error');
+      }
+    } catch (error) {
+      console.error('Error generating chat summary:', error);
+      showNotification('Error generating chat summary', 'error');
+    }
+  };
+
   const saveChatAsPDF = () => {
-    if (currentChat) {
-      // Here you would implement the logic to save the chat as PDF
-      console.log('Saving chat as PDF:', currentChat.name);
-      alert(`Chat "${currentChat.name}" is being saved as PDF`);
+    if (!currentChat) return;
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+
+      const title = currentChat.name || 'Chat Conversation';
+      const formattedMessages = (messages || []).map(m => {
+        const who = m.isBot ? 'Assistant' : 'You';
+        const time = m.timestamp ? new Date(m.timestamp).toLocaleString() : '';
+        const text = (m.text || '').toString().replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return `<div class=\"msg ${m.isBot ? 'bot' : 'user'}\">\n` +
+               `  <div class=\"meta\"><span class=\"who\">${who}</span><span class=\"time\">${time}</span></div>\n` +
+               `  <div class=\"bubble\">${text}</div>\n` +
+               `</div>`;
+      }).join('');
+
+      const html = `<!doctype html>
+        <html>
+          <head>
+            <meta charset=\"utf-8\" />
+            <title>${title} - PDF</title>
+            <style>
+              :root { --ink:#111; --muted:#666; --border:#e5e7eb; --bg:#fff; }
+              @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+              * { box-sizing: border-box; }
+              body { margin: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif; color: var(--ink); background: var(--bg); }
+              .header { margin-bottom: 20px; }
+              .title { font-size: 20px; font-weight: 600; margin: 0 0 4px 0; }
+              .subtitle { font-size: 12px; color: var(--muted); }
+              .chat { border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+              .msg { margin: 12px 0; }
+              .meta { display: flex; gap: 8px; align-items: baseline; margin-bottom: 6px; }
+              .who { font-weight: 600; }
+              .time { font-size: 11px; color: var(--muted); }
+              .bubble { border: 1px solid var(--border); border-radius: 10px; padding: 12px; line-height: 1.5; white-space: pre-wrap; }
+              .msg.user .bubble { background: #f8fafc; }
+              .msg.bot .bubble { background: #f5f5ff; border-color: #dcdcff; }
+              .footer { margin-top: 16px; font-size: 11px; color: var(--muted); text-align: right; }
+            </style>
+          </head>
+          <body>
+            <div class=\"header\">
+              <h1 class=\"title\">${title}</h1>
+              <div class=\"subtitle\">Exported ${new Date().toLocaleString()}</div>
+            </div>
+            <div class=\"chat\">${formattedMessages}</div>
+            <div class=\"footer\">Generated by Client Onboarding Portal</div>
+            <script>setTimeout(() => { window.print(); }, 100);</script>
+          </body>
+        </html>`;
+
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
       setShowChatOptions(false);
+    } catch (err) {
+      console.error('Failed to export chat as PDF', err);
     }
   };
 
   const deleteCurrentChat = () => {
-    if (currentChat && window.confirm(`Are you sure you want to delete "${currentChat.name}"?`)) {
-      deleteChat(currentChat.id);
+    if (currentChat) {
+      showConfirmDialog(
+        `Are you sure you want to delete "${currentChat.name}"?`,
+        () => {
+          deleteChat(currentChat.id);
+          setShowChatOptions(false);
+        },
+        () => {
+          setShowChatOptions(false);
+        }
+      );
+    }
+  };
+
+  const archiveCurrentChat = () => {
+    if (currentChat) {
+      // Move the chat to archived chats
+      const chatToArchive = { ...currentChat, archivedAt: new Date() };
+      setArchivedChats(prev => [chatToArchive, ...prev]);
+      
+      // Remove from active chats
+      const updatedChats = chats.filter(chat => chat.id !== currentChat.id);
+      setChats(updatedChats);
+      
+      // Switch to another chat if this was the current one
+      if (currentChat.id === currentChatId && updatedChats.length > 0) {
+        setCurrentChatId(updatedChats[0].id);
+        updatedChats[0].isActive = true;
+      }
+      
+      console.log('Archiving chat:', currentChat.name);
+      showNotification(`Chat "${currentChat.name}" has been archived`, 'success');
       setShowChatOptions(false);
     }
   };
@@ -1681,7 +1927,7 @@ function App() {
                           selectedProject.timeline.find(p => p.status === 'completed');
       
       if (!currentPhase) {
-        alert('No active phase found for document upload');
+        showNotification('No active phase found for document upload', 'warning');
         return;
       }
 
@@ -1725,10 +1971,10 @@ function App() {
       setUploadedFiles([]);
       setShowDocumentUpload(false);
       
-      alert('Documents uploaded successfully!');
+      showNotification('Documents uploaded successfully!', 'success');
     } catch (error) {
       console.error('Document upload error:', error);
-      alert('Failed to upload documents. Please try again.');
+      showNotification('Failed to upload documents. Please try again.', 'error');
     } finally {
       setIsUploading(false);
     }
@@ -1867,6 +2113,20 @@ function App() {
   if (showChat) {
     return (
       <div className="chat-app">
+        {/* Notification Container */}
+        <div className="notifications-container">
+          {notifications.map((notification) => (
+            <Notification
+              key={notification.id}
+              message={notification.message}
+              type={notification.type}
+              duration={notification.duration}
+              onConfirm={notification.onConfirm}
+              onCancel={notification.onCancel}
+              onClose={() => removeNotification(notification.id)}
+            />
+          ))}
+        </div>
         {/* Left Sidebar */}
         {isLeftSidebarVisible && (
           <div className="chat-sidebar">
@@ -1906,7 +2166,49 @@ function App() {
                       onClick={() => handleSessionClick(session)}
                     >
                       <div className="session-header">
-                        <span className="session-project">{session.project_name}</span>
+                        {renamingSessionId === session.session_id ? (
+                          <input
+                            className="session-rename-input"
+                            value={tempChatName}
+                            autoFocus
+                            onChange={(e) => setTempChatName(e.target.value)}
+                            onBlur={async () => {
+                              try {
+                                if (tempChatName.trim() && session.session_id) {
+                                  const res = await ApiService.renameChatSession(session.session_id, tempChatName.trim());
+                                  if (res.success) {
+                                    setUserSessions(prev => prev.map(s => s.session_id === session.session_id ? { ...s, chat_name: res.chat_name } : s));
+                                  }
+                                }
+                              } catch (err) {
+                                console.error('Rename failed', err);
+                                showNotification('Failed to rename chat', 'error');
+                              } finally {
+                                setRenamingSessionId(null);
+                                setTempChatName('');
+                              }
+                            }}
+                            onKeyDown={async (e) => {
+                              if (e.key === 'Enter') {
+                                e.currentTarget.blur();
+                              } else if (e.key === 'Escape') {
+                                setRenamingSessionId(null);
+                                setTempChatName('');
+                              }
+                            }}
+                          />
+                        ) : (
+                          <span
+                            className="session-project"
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              setRenamingSessionId(session.session_id);
+                              setTempChatName(session.chat_name || session.project_name || '');
+                            }}
+                          >
+                            {session.chat_name || session.project_name}
+                          </span>
+                        )}
                         <span className={`session-status ${session.is_active ? 'active' : 'inactive'}`}>
                           {session.is_active ? 'Active' : 'Inactive'}
                         </span>
@@ -1969,7 +2271,52 @@ function App() {
               <div className="chat-partner">
                 <div className="partner-avatar">{currentChat ? currentChat.avatar : 'A'}</div>
                 <div className="partner-info">
-                  <div className="partner-name">{currentChat ? currentChat.name : 'Select a chat'}</div>
+                  {isRenamingChatHeader ? (
+                    <input
+                      className="session-rename-input"
+                      value={tempHeaderName}
+                      autoFocus
+                      onChange={(e) => setTempHeaderName(e.target.value)}
+                      onBlur={async () => {
+                        try {
+                          const sid = sessionIds[currentChatId];
+                          if (sid && tempHeaderName.trim()) {
+                            const res = await ApiService.renameChatSession(sid, tempHeaderName.trim());
+                            if (res.success) {
+                              setUserSessions(prev => prev.map(s => s.session_id === sid ? { ...s, chat_name: res.chat_name } : s));
+                            }
+                          }
+                          // Update local chat name regardless for immediate UI feedback
+                          setChats(prev => prev.map(c => c.id === currentChatId ? { ...c, name: tempHeaderName.trim() || c.name } : c));
+                        } catch (err) {
+                          console.error('Header rename failed', err);
+                          showNotification('Failed to rename chat', 'error');
+                        } finally {
+                          setIsRenamingChatHeader(false);
+                          setTempHeaderName('');
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.currentTarget.blur();
+                        } else if (e.key === 'Escape') {
+                          setIsRenamingChatHeader(false);
+                          setTempHeaderName('');
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className="partner-name"
+                      onDoubleClick={() => {
+                        setIsRenamingChatHeader(true);
+                        setTempHeaderName(currentChat ? currentChat.name : '');
+                      }}
+                      title="Double-click to rename"
+                    >
+                      {currentChat ? currentChat.name : 'Select a chat'}
+                    </div>
+                  )}
                   <div className="partner-status">{currentChat ? currentChat.preview : 'No chat selected'}</div>
                 </div>
               </div>
@@ -1988,6 +2335,14 @@ function App() {
                       <div className="dropdown-item" onClick={saveChatAsPDF}>
                         <FaFileAlt />
                         <span>Save this chat as PDF</span>
+                      </div>
+                      <div className="dropdown-item" onClick={generateChatSummary}>
+                        <FaSync />
+                        <span>Generate chat summary</span>
+                      </div>
+                      <div className="dropdown-item archive-option" onClick={archiveCurrentChat}>
+                        <FaArchive />
+                        <span>Archive chat</span>
                       </div>
                       <div className="dropdown-item delete-option" onClick={deleteCurrentChat}>
                         <FaTrash />
@@ -2029,6 +2384,45 @@ function App() {
                             <FaDownload /> Download SOW
                           </button>
                         </div>
+                      ) : message.type === 'image' ? (
+                        <div className="image-message">
+                          <div className="image-preview">
+                            <img 
+                              src={message.imageUrl} 
+                              alt={message.fileName}
+                              className="uploaded-image"
+                              onClick={() => {
+                                setPreviewFile(message);
+                                setShowDocumentPreviewer(true);
+                              }}
+                            />
+                          </div>
+                          <div className="image-info">
+                            <span className="image-name">{message.fileName}</span>
+                            <span className="image-size">{message.fileSize}</span>
+                          </div>
+                        </div>
+                      ) : message.type === 'document' ? (
+                        <div className="document-message">
+                          <div className="document-info" onClick={() => {
+                            setPreviewFile(message);
+                            setShowDocumentPreviewer(true);
+                          }}>
+                            <FaFileAlt className="document-icon" />
+                            <span className="document-name">{message.fileName}</span>
+                            <span className="document-size">{message.fileSize}</span>
+                          </div>
+                          <button className="download-btn" onClick={() => {
+                            const url = URL.createObjectURL(message.file);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = message.fileName;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          }}>
+                            <FaDownload /> Download
+                          </button>
+                        </div>
                       ) : (
                         <div className={`message-text ${message.isProcessing ? 'processing' : ''}`}>
                           {message.isBot ? (
@@ -2056,7 +2450,61 @@ function App() {
           <div className="chat-input-container">
             <form onSubmit={handleSendMessage} className="chat-input-form">
               <div className="input-actions">
-                <button type="button" className="action-button plus-button"><FaPlus /></button>
+                <div className="upload-options-container">
+                  <button 
+                    type="button" 
+                    className="action-button plus-button"
+                    onClick={toggleUploadOptions}
+                  >
+                    <FaPlus />
+                  </button>
+                  
+                  {showUploadOptions && (
+                    <div className="upload-options-dropdown">
+                      <div className="upload-option-item">
+                        <input
+                          type="file"
+                          id="file-upload"
+                          multiple
+                          onChange={handleFileUpload}
+                          style={{ display: 'none' }}
+                        />
+                        <label htmlFor="file-upload" className="upload-option-label">
+                          <FaPaperclip />
+                          <span>Upload Files</span>
+                        </label>
+                      </div>
+                      <div className="upload-option-item">
+                        <input
+                          type="file"
+                          id="image-upload"
+                          multiple
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          style={{ display: 'none' }}
+                        />
+                        <label htmlFor="image-upload" className="upload-option-label">
+                          <FaImage />
+                          <span>Upload Images</span>
+                        </label>
+                      </div>
+                      <div className="upload-option-item">
+                        <input
+                          type="file"
+                          id="document-upload"
+                          multiple
+                          accept=".pdf,.doc,.docx,.txt"
+                          onChange={handleChatDocumentUpload}
+                          style={{ display: 'none' }}
+                        />
+                        <label htmlFor="document-upload" className="upload-option-label">
+                          <FaFileAlt />
+                          <span>Upload Documents</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               <textarea
                 value={inputMessage}
@@ -2106,17 +2554,17 @@ function App() {
             <div className="sidebar-section">
               <h3 className="section-title">Quick Actions</h3>
               <div className="quick-actions-list">
-                <div className="quick-action-item" onClick={() => setShowPortal(true)}>
+                <div className="quick-action-item" onClick={handleOpenPortal}>
                   <span className="action-icon"><FaSignOutAlt /></span>
                   <span className="action-text">Take me to portal</span>
                 </div>
                 <div className="quick-action-item">
-                  <span className="action-icon"><FaClipboardList /></span>
-                  <span className="action-text">Current projects</span>
-                </div>
-                <div className="quick-action-item">
                   <span className="action-icon"><FaFolder /></span>
                   <span className="action-text">Projects archive</span>
+                </div>
+                <div className="quick-action-item" onClick={openArchivedChats}>
+                  <span className="action-icon"><FaArchive /></span>
+                  <span className="action-text">Archived chats</span>
                 </div>
                 <div className="quick-action-item" onClick={() => setShowDashboard(true)}>
                   <span className="action-icon"><FaChartBar /></span>
@@ -2179,14 +2627,6 @@ function App() {
                     <h2 className="pane-title">Projects</h2>
                     <div className="pane-actions">
                       <button 
-                        className="refresh-projects-btn"
-                        onClick={loadUserProjects}
-                        disabled={isLoadingProjects}
-                        title="Refresh projects"
-                      >
-                        <FaSync className={isLoadingProjects ? 'spinning' : ''} />
-                      </button>
-                      <button 
                         className="new-project-btn"
                         onClick={() => setShowNewProjectForm(true)}
                       >
@@ -2221,9 +2661,21 @@ function App() {
                         >
                           <div className="project-header">
                             <h3 className="project-title">{project.title}</h3>
-                            <span className={`project-status ${getProjectStatus(project).toLowerCase().replace(' ', '-')}`}>
-                              {getProjectStatus(project)}
-                            </span>
+                            <div className="project-header-actions">
+                              <span className={`project-status ${getProjectStatus(project).toLowerCase().replace(' ', '-')}`}>
+                                {getProjectStatus(project)}
+                              </span>
+                              <button 
+                                className="delete-project-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteProject(project);
+                                }}
+                                title="Delete project"
+                              >
+                                <FaTrash />
+                              </button>
+                            </div>
                           </div>
                           <p className="project-description">{project.description}</p>
                         </div>
@@ -2624,7 +3076,9 @@ function App() {
                     </div>
                   ) : (
                     <div className="placeholder-message">
-                      <FaFolder />
+                      <div className="placeholder-icon-container">
+                        <FaFolder />
+                      </div>
                       <h3 className="placeholder-title">Select a project from the left pane to view details</h3>
                       <p className="placeholder-subtitle">Choose any project to see comprehensive information, timelines, and progress updates</p>
                     </div>
@@ -3239,12 +3693,123 @@ function App() {
             </div>
           </div>
         )}
+
+        {/* Archived Chats Modal */}
+        {showArchivedChats && (
+          <div className="archived-chats-overlay" onClick={closeArchivedChats}>
+            <div className="archived-chats-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="archived-chats-header">
+                <h3 className="archived-chats-title">Archived Chats</h3>
+                <button 
+                  className="archived-chats-close-btn" 
+                  onClick={closeArchivedChats}
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="archived-chats-content">
+                {archivedChats.length === 0 ? (
+                  <div className="archived-chats-empty">
+                    <FaArchive className="empty-icon" />
+                    <h4>No archived chats</h4>
+                    <p>Chats you archive will appear here</p>
+                  </div>
+                ) : (
+                  <div className="archived-chats-list">
+                    {archivedChats.map((archivedChat) => (
+                      <div key={archivedChat.id} className="archived-chat-item">
+                        <div className="archived-chat-info">
+                          <div className="archived-chat-avatar">{archivedChat.avatar}</div>
+                          <div className="archived-chat-details">
+                            <div className="archived-chat-name">{archivedChat.name}</div>
+                            <div className="archived-chat-preview">{archivedChat.preview}</div>
+                            <div className="archived-chat-date">
+                              Archived {archivedChat.archivedAt.toLocaleDateString()}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="archived-chat-actions">
+                          <button 
+                            className="restore-btn"
+                            onClick={() => restoreArchivedChat(archivedChat)}
+                            title="Restore chat"
+                          >
+                            <FaUndo />
+                          </button>
+                          <button 
+                            className="delete-btn"
+                            onClick={() => deleteArchivedChat(archivedChat)}
+                            title="Permanently delete"
+                          >
+                            <FaTrash />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Delete Project Confirmation Modal */}
+        {showDeleteConfirm && (
+          <div className="modal-overlay" onClick={cancelDeleteProject}>
+            <div className="confirmation-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Delete Project</h3>
+                <button className="modal-close-btn" onClick={cancelDeleteProject}>
+                  <FaTimes />
+                </button>
+              </div>
+              <div className="modal-content">
+                <div className="warning-icon">
+                  <FaTrash />
+                </div>
+                <p>Are you sure you want to delete the project <strong>"{projectToDelete?.title}"</strong>?</p>
+                <p className="warning-text">This action cannot be undone. All project data, conversations, and documents will be permanently removed.</p>
+              </div>
+              <div className="modal-actions">
+                <button 
+                  className="cancel-btn" 
+                  onClick={cancelDeleteProject}
+                  disabled={isDeletingProject}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="delete-confirm-btn" 
+                  onClick={confirmDeleteProject}
+                  disabled={isDeletingProject}
+                >
+                  {isDeletingProject ? 'Deleting...' : 'Delete Project'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div className="App">
+      {/* Notification Container */}
+      <div className="notifications-container">
+        {notifications.map((notification) => (
+          <Notification
+            key={notification.id}
+            message={notification.message}
+            type={notification.type}
+            duration={notification.duration}
+            onConfirm={notification.onConfirm}
+            onCancel={notification.onCancel}
+            onClose={() => removeNotification(notification.id)}
+          />
+        ))}
+      </div>
       <div className="login-container">
         <div className="login-card">
           <div className="welcome-section">
