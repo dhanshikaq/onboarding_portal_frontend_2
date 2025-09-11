@@ -36,7 +36,8 @@ import {
   FaSync,
   FaArchive,
   FaUndo,
-  FaImage
+  FaImage,
+  FaSearch
 } from 'react-icons/fa';
 import './App.css';
 import DocumentPreviewer from './components/DocumentPreviewer';
@@ -99,6 +100,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showPortal, setShowPortal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
+  const [showArchives, setShowArchives] = useState(false);
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
   const [showDocumentPreviewer, setShowDocumentPreviewer] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
@@ -521,6 +523,18 @@ function App() {
 
   // Projects populated from backend
   const [projects, setProjects] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Derived list for search filtering
+  const filteredProjects = React.useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return projects;
+    return projects.filter(project => (
+      (project.title || '').toLowerCase().includes(query) ||
+      (project.description || '').toLowerCase().includes(query) ||
+      (project.projectId || '').toLowerCase().includes(query)
+    ));
+  }, [projects, searchQuery]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -814,6 +828,17 @@ function App() {
       const sessions = response.sessions || [];
       setUserSessions(sessions);
 
+      // Update local chats state with backend chat names
+      setChats(prev => prev.map(chat => {
+        const sessionId = sessionIds[chat.id];
+        if (sessionId) {
+          const session = sessions.find(s => s.session_id === sessionId);
+          if (session && session.chat_name) {
+            return { ...chat, name: session.chat_name };
+          }
+        }
+        return chat;
+      }));
       
       // Clean up stale session mappings
       const validSessionIds = sessions.map(s => s.session_id);
@@ -2110,6 +2135,202 @@ function App() {
     }
   };
 
+  if (showDashboard) {
+    return (
+      <div className="dashboard-page">
+        <div className="dashboard-header">
+          <div className="dashboard-header-left">
+            <button 
+              className="back-button" 
+              onClick={() => {
+                setShowDashboard(false);
+                setShowPortal(true);
+              }}
+            >
+              <FaArrowLeft />
+              <span>Back to Portal</span>
+            </button>
+            <div className="dashboard-title-section">
+              <h1 className="dashboard-title">Dashboard</h1>
+              <p className="dashboard-subtitle">Overview of your projects and activities</p>
+            </div>
+          </div>
+          <div className="dashboard-user-info">
+            <div className="user-details">
+              <span className="user-greeting">Hi! {userName}</span>
+              <span className="user-role">{user ? user.tag : 'User'}</span>
+            </div>
+            <div className="user-avatar">{userInitial}</div>
+          </div>
+        </div>
+        
+        <div className="dashboard-content">
+          {/* Stats Overview */}
+          <div className="dashboard-stats">
+            <div className="stat-card">
+              <div className="stat-icon">
+                <FaProjectDiagram />
+              </div>
+              <div className="stat-content">
+                <h3 className="stat-number">{projects.length}</h3>
+                <p className="stat-label">Total Projects</p>
+              </div>
+            </div>
+            
+            <div className="stat-card">
+              <div className="stat-icon">
+                <FaUsers />
+              </div>
+              <div className="stat-content">
+                <h3 className="stat-number">
+                  {projects.reduce((total, project) => 
+                    total + project.csaMembers.length + project.quadrantTeam.length + project.clientMembers.length, 0
+                  )}
+                </h3>
+                <p className="stat-label">Team Members</p>
+              </div>
+            </div>
+            
+            <div className="stat-card">
+              <div className="stat-icon">
+                <FaCalendarCheck />
+              </div>
+              <div className="stat-content">
+                <h3 className="stat-number">
+                  {projects.filter(project => project.status === 'In Progress').length}
+                </h3>
+                <p className="stat-label">Active Projects</p>
+              </div>
+            </div>
+            
+            <div className="stat-card">
+              <div className="stat-icon">
+                <FaFileContract />
+              </div>
+              <div className="stat-content">
+                <h3 className="stat-number">
+                  {projects.reduce((total, project) => 
+                    total + project.timeline.reduce((phaseTotal, phase) => 
+                      phaseTotal + phase.documents.length, 0
+                    ), 0
+                  )}
+                </h3>
+                <p className="stat-label">Documents</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Activity */}
+          <div className="dashboard-section">
+            <h3 className="section-title">Recent Activity</h3>
+            <div className="activity-list">
+              {projects.slice(0, 3).map((project) => (
+                <div key={project.id} className="activity-item">
+                  <div className="activity-icon">
+                    <FaProjectDiagram />
+                  </div>
+                  <div className="activity-content">
+                    <h4 className="activity-title">{project.title}</h4>
+                    <p className="activity-description">
+                      Project {project.status.toLowerCase()} - {project.company}
+                    </p>
+                    <span className="activity-time">
+                      Started {new Date(project.startDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="activity-status">
+                    <span className={`status-badge ${project.status.toLowerCase().replace(' ', '-')}`}>
+                      {project.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Project Status Overview */}
+          <div className="dashboard-section">
+            <h3 className="section-title">Project Status Overview</h3>
+            <div className="status-overview">
+              <div className="status-item">
+                <div className="status-header">
+                  <span className="status-label">New</span>
+                  <span className="status-count">
+                    {projects.filter(p => getProjectStatus(p) === 'New').length}
+                  </span>
+                </div>
+                <div className="status-bar">
+                  <div 
+                    className="status-fill new" 
+                    style={{width: `${(projects.filter(p => getProjectStatus(p) === 'New').length / projects.length) * 100}%`}}
+                  ></div>
+                </div>
+              </div>
+              
+              <div className="status-item">
+                <div className="status-header">
+                  <span className="status-label">In Progress</span>
+                  <span className="status-count">
+                    {projects.filter(p => getProjectStatus(p) === 'In Progress').length}
+                  </span>
+                </div>
+                <div className="status-bar">
+                  <div className="status-fill in-progress" 
+                    style={{width: `${(projects.filter(p => getProjectStatus(p) === 'In Progress').length / projects.length) * 100}%`}}
+                  ></div>
+                </div>
+              </div>
+              
+              <div className="status-item">
+                <div className="status-header">
+                  <span className="status-label">Completed</span>
+                  <span className="status-count">
+                    {projects.filter(p => getProjectStatus(p) === 'Completed').length}
+                  </span>
+                </div>
+                <div className="status-bar">
+                  <div 
+                    className="status-fill completed" 
+                    style={{width: `${(projects.filter(p => getProjectStatus(p) === 'Completed').length / projects.length) * 100}%`}}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="dashboard-section">
+            <h3 className="section-title">Quick Actions</h3>
+            <div className="quick-actions-grid">
+              <button className="quick-action-btn" onClick={() => {
+                setShowDashboard(false);
+                setShowNewProjectForm(true);
+              }}>
+                <FaPlusCircle />
+                <span>Create New Project</span>
+              </button>
+              <button className="quick-action-btn" onClick={() => {
+                setShowDashboard(false);
+                handleOpenPortal();
+              }}>
+                <FaFolderOpen />
+                <span>View All Projects</span>
+              </button>
+              <button className="quick-action-btn">
+                <FaChartBar />
+                <span>Generate Report</span>
+              </button>
+              <button className="quick-action-btn">
+                <FaUsers />
+                <span>Manage Team</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (showChat) {
     return (
       <div className="chat-app">
@@ -2178,6 +2399,8 @@ function App() {
                                   const res = await ApiService.renameChatSession(session.session_id, tempChatName.trim());
                                   if (res.success) {
                                     setUserSessions(prev => prev.map(s => s.session_id === session.session_id ? { ...s, chat_name: res.chat_name } : s));
+                                    // Refresh sessions to ensure data consistency
+                                    loadUserSessions();
                                   }
                                 }
                               } catch (err) {
@@ -2284,6 +2507,8 @@ function App() {
                             const res = await ApiService.renameChatSession(sid, tempHeaderName.trim());
                             if (res.success) {
                               setUserSessions(prev => prev.map(s => s.session_id === sid ? { ...s, chat_name: res.chat_name } : s));
+                              // Refresh sessions to ensure data consistency
+                              loadUserSessions();
                             }
                           }
                           // Update local chat name regardless for immediate UI feedback
@@ -2610,6 +2835,25 @@ function App() {
                     <p className="portal-subtitle">Manage your projects and client relationships</p>
                   </div>
                 </div>
+                <div className="portal-navigation">
+                  <button 
+                    className="nav-button dashboard-btn" 
+                    onClick={() => {
+                      setShowDashboard(true);
+                      setShowPortal(false);
+                    }}
+                  >
+                    <FaChartBar />
+                    <span>Dashboard</span>
+                  </button>
+                  <button 
+                    className="nav-button archives-btn" 
+                    onClick={() => setShowArchives(true)}
+                  >
+                    <FaArchive />
+                    <span>Project Archives</span>
+                  </button>
+                </div>
                 <div className="portal-user-info">
                   <div className="user-details">
                     <span className="user-greeting">Hi! {userName}</span>
@@ -2635,6 +2879,21 @@ function App() {
                       </button>
                     </div>
                   </div>
+                  {/* Search bar */}
+                  <div className="search-row">
+                    <div className="search-pill">
+                      <input
+                        type="text"
+                        className="search-pill-input"
+                        placeholder="Search..."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                      />
+                    </div>
+                    <button className="search-circle" aria-label="Search">
+                      <FaSearch />
+                    </button>
+                  </div>
                   <div className="project-list">
                     {isLoadingProjects ? (
                       <div className="loading-projects">
@@ -2652,8 +2911,8 @@ function App() {
                           <span>Retry</span>
                         </button>
                       </div>
-                    ) : projects.length > 0 ? (
-                      projects.map((project) => (
+                    ) : filteredProjects.length > 0 ? (
+                      filteredProjects.map((project) => (
                         <div 
                           key={project.id}
                           className={`project-item ${selectedProject?.id === project.id ? 'selected' : ''}`}
@@ -2682,7 +2941,13 @@ function App() {
                       ))
                     ) : (
                       <div className="no-projects">
-                        <p>No projects found</p>
+                        <p>{searchQuery ? `No results for "${searchQuery}"` : 'No projects found'}</p>
+                        {searchQuery ? (
+                          <button className="retry-btn" onClick={() => setSearchQuery('')}>
+                            <FaTimes />
+                            <span>Clear search</span>
+                          </button>
+                        ) : (
                         <button 
                           className="create-first-project-btn"
                           onClick={() => setShowNewProjectForm(true)}
@@ -2690,6 +2955,7 @@ function App() {
                           <FaPlusCircle />
                           <span>Create Your First Project</span>
                         </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -3418,190 +3684,6 @@ function App() {
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-        )}
-
-        {/* Dashboard Popup */}
-        {showDashboard && (
-          <div className="dashboard-overlay" onClick={() => setShowDashboard(false)}>
-            <div className="dashboard-popup" onClick={(e) => e.stopPropagation()}>
-              <div className="dashboard-header">
-                <div className="dashboard-header-left">
-                  <h2 className="dashboard-title">Dashboard</h2>
-                  <p className="dashboard-subtitle">Overview of your projects and activities</p>
-                </div>
-                <button 
-                  className="dashboard-close-btn" 
-                  onClick={() => setShowDashboard(false)}
-                >
-                  <FaTimes />
-                </button>
-              </div>
-              
-              <div className="dashboard-content">
-                {/* Stats Overview */}
-                <div className="dashboard-stats">
-                  <div className="stat-card">
-                    <div className="stat-icon">
-                      <FaProjectDiagram />
-                    </div>
-                    <div className="stat-content">
-                      <h3 className="stat-number">{projects.length}</h3>
-                      <p className="stat-label">Total Projects</p>
-                    </div>
-                  </div>
-                  
-                  <div className="stat-card">
-                    <div className="stat-icon">
-                      <FaUsers />
-                    </div>
-                    <div className="stat-content">
-                      <h3 className="stat-number">
-                        {projects.reduce((total, project) => 
-                          total + project.csaMembers.length + project.quadrantTeam.length + project.clientMembers.length, 0
-                        )}
-                      </h3>
-                      <p className="stat-label">Team Members</p>
-                    </div>
-                  </div>
-                  
-                  <div className="stat-card">
-                    <div className="stat-icon">
-                      <FaCalendarCheck />
-                    </div>
-                    <div className="stat-content">
-                      <h3 className="stat-number">
-                        {projects.filter(project => project.status === 'In Progress').length}
-                      </h3>
-                      <p className="stat-label">Active Projects</p>
-                    </div>
-                  </div>
-                  
-                  <div className="stat-card">
-                    <div className="stat-icon">
-                      <FaFileContract />
-                    </div>
-                    <div className="stat-content">
-                      <h3 className="stat-number">
-                        {projects.reduce((total, project) => 
-                          total + project.timeline.reduce((phaseTotal, phase) => 
-                            phaseTotal + phase.documents.length, 0
-                          ), 0
-                        )}
-                      </h3>
-                      <p className="stat-label">Documents</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Recent Activity */}
-                <div className="dashboard-section">
-                  <h3 className="section-title">Recent Activity</h3>
-                  <div className="activity-list">
-                    {projects.slice(0, 3).map((project) => (
-                      <div key={project.id} className="activity-item">
-                        <div className="activity-icon">
-                          <FaProjectDiagram />
-                        </div>
-                        <div className="activity-content">
-                          <h4 className="activity-title">{project.title}</h4>
-                          <p className="activity-description">
-                            Project {project.status.toLowerCase()} - {project.company}
-                          </p>
-                          <span className="activity-time">
-                            Started {new Date(project.startDate).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <div className="activity-status">
-                          <span className={`status-badge ${project.status.toLowerCase().replace(' ', '-')}`}>
-                            {project.status}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Project Status Overview */}
-                <div className="dashboard-section">
-                  <h3 className="section-title">Project Status Overview</h3>
-                  <div className="status-overview">
-                    <div className="status-item">
-                      <div className="status-header">
-                        <span className="status-label">New</span>
-                        <span className="status-count">
-                          {projects.filter(p => getProjectStatus(p) === 'New').length}
-                        </span>
-                      </div>
-                      <div className="status-bar">
-                        <div 
-                          className="status-fill new" 
-                          style={{width: `${(projects.filter(p => getProjectStatus(p) === 'New').length / projects.length) * 100}%`}}
-                        ></div>
-                      </div>
-                    </div>
-                    
-                    <div className="status-item">
-                      <div className="status-header">
-                        <span className="status-label">In Progress</span>
-                        <span className="status-count">
-                          {projects.filter(p => getProjectStatus(p) === 'In Progress').length}
-                        </span>
-                      </div>
-                      <div className="status-bar">
-                        <div className="status-fill in-progress" 
-                          style={{width: `${(projects.filter(p => getProjectStatus(p) === 'In Progress').length / projects.length) * 100}%`}}
-                        ></div>
-                      </div>
-                    </div>
-                    
-                    <div className="status-item">
-                      <div className="status-header">
-                        <span className="status-label">Completed</span>
-                        <span className="status-count">
-                          {projects.filter(p => getProjectStatus(p) === 'Completed').length}
-                        </span>
-                      </div>
-                      <div className="status-bar">
-                        <div 
-                          className="status-fill completed" 
-                          style={{width: `${(projects.filter(p => getProjectStatus(p) === 'Completed').length / projects.length) * 100}%`}}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quick Actions */}
-                <div className="dashboard-section">
-                  <h3 className="section-title">Quick Actions</h3>
-                  <div className="quick-actions-grid">
-                                         <button className="quick-action-btn" onClick={() => {
-                       setShowDashboard(false);
-                       setShowNewProjectForm(true);
-                     }}>
-                       <FaPlusCircle />
-                       <span>Create New Project</span>
-                     </button>
-                     <button className="quick-action-btn" onClick={() => {
-                       setShowDashboard(false);
-                       handleOpenPortal();
-                     }}>
-                       <FaFolderOpen />
-                       <span>View All Projects</span>
-                     </button>
-                    <button className="quick-action-btn">
-                      <FaChartBar />
-                      <span>Generate Report</span>
-                    </button>
-                    <button className="quick-action-btn">
-                      <FaUsers />
-                      <span>Manage Team</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         )}
