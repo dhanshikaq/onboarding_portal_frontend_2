@@ -277,6 +277,61 @@ class ApiService {
   }
 
   /**
+   * Get user projects grouped by company and domain
+   * @param {number} userId - User ID to get projects for
+   * @returns {Promise<Object>} Response with format:
+   * {
+   *   success: boolean,
+   *   user: {
+   *     user_id: number,
+   *     name: string,
+   *     email: string,
+   *     tag: string
+   *   },
+   *   grouped_projects: {
+   *     company_folders: Array<{
+   *       type: 'company',
+   *       id: number,
+   *       name: string,
+   *       info: Object,
+   *       projects: Array<Object>,
+   *       project_count: number
+   *     }>,
+   *     domain_folders: Array<{
+   *       type: 'domain',
+   *       id: string,
+   *       name: string,
+   *       projects: Array<Object>,
+   *       project_count: number
+   *     }>,
+   *     total_projects: number,
+   *     total_companies: number,
+   *     total_domains: number
+   *   }
+   * }
+   */
+  static async getUserProjectsGrouped(userId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/projects/user/${userId}/grouped/`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to get grouped user projects');
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * Delete a project
    * @param {number} projectId - Project ID to delete
    * @returns {Promise<Object>} Response with format:

@@ -101,6 +101,7 @@ function App() {
   const [showPortal, setShowPortal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showArchives, setShowArchives] = useState(false);
+  const [dashboardFromPortal, setDashboardFromPortal] = useState(false);
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
   const [showDocumentPreviewer, setShowDocumentPreviewer] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
@@ -164,6 +165,12 @@ function App() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState(null);
   const [isDeletingProject, setIsDeletingProject] = useState(false);
+  
+  // Admin authentication state
+  const [showAdminAuth, setShowAdminAuth] = useState(false);
+  const [adminCredentials, setAdminCredentials] = useState({ email: '', password: '' });
+  const [isAdminAuthenticating, setIsAdminAuthenticating] = useState(false);
+  const [adminAuthError, setAdminAuthError] = useState('');
 
   // Phase completion confirmation state
   const [showPhaseConfirmation, setShowPhaseConfirmation] = useState(false);
@@ -523,7 +530,9 @@ function App() {
 
   // Projects populated from backend
   const [projects, setProjects] = useState([]);
+  const [groupedProjects, setGroupedProjects] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState('grouped'); // 'grouped' or 'list'
 
   // Derived list for search filtering
   const filteredProjects = React.useMemo(() => {
@@ -865,11 +874,15 @@ function App() {
     setIsLoadingProjects(true);
     setProjectsError(null);
     try {
-      const response = await ApiService.getUserProjects(user.user_id);
+      // Load both regular and grouped projects
+      const [regularResponse, groupedResponse] = await Promise.all([
+        ApiService.getUserProjects(user.user_id),
+        ApiService.getUserProjectsGrouped(user.user_id)
+      ]);
       
-      if (response.success && response.projects) {
+      if (regularResponse.success && regularResponse.projects) {
         // Transform the API response to match the expected project format
-        const transformedProjects = response.projects.map(project => ({
+        const transformedProjects = regularResponse.projects.map(project => ({
           id: project.project_id,
           title: project.project_name,
           description: `${project.domain} project for ${project.company_name}`,
@@ -915,6 +928,105 @@ function App() {
         
         setProjects(transformedProjects);
       }
+      
+      if (groupedResponse.success && groupedResponse.grouped_projects) {
+        // Transform grouped projects to include the same project structure
+        const transformedGroupedProjects = {
+          ...groupedResponse.grouped_projects,
+          company_folders: groupedResponse.grouped_projects.company_folders.map(folder => ({
+            ...folder,
+            projects: folder.projects.map(project => ({
+              id: project.project_id,
+              title: project.project_name,
+              description: `${project.domain} project for ${project.company_name}`,
+              status: 'In Progress',
+              projectId: `PROJ-${project.project_id.toString().padStart(3, '0')}`,
+              startDate: project.start_date,
+              endDate: project.end_date,
+              domain: project.domain,
+              company: project.company_name,
+              userRole: project.user_role,
+              companyId: project.company_id,
+              csaMembers: [],
+              quadrantTeam: [],
+              clientMembers: [],
+              timeline: [
+                {
+                  id: 1,
+                  phase: 'Discovery Call',
+                  status: 'completed',
+                  documents: []
+                },
+                {
+                  id: 2,
+                  phase: 'Project Planning',
+                  status: 'in-progress',
+                  documents: []
+                },
+                {
+                  id: 3,
+                  phase: 'Design Phase',
+                  status: 'pending',
+                  documents: []
+                },
+                {
+                  id: 4,
+                  phase: 'Closure',
+                  status: 'pending',
+                  documents: []
+                }
+              ]
+            }))
+          })),
+          domain_folders: groupedResponse.grouped_projects.domain_folders.map(folder => ({
+            ...folder,
+            projects: folder.projects.map(project => ({
+              id: project.project_id,
+              title: project.project_name,
+              description: `${project.domain} project for ${project.company_name}`,
+              status: 'In Progress',
+              projectId: `PROJ-${project.project_id.toString().padStart(3, '0')}`,
+              startDate: project.start_date,
+              endDate: project.end_date,
+              domain: project.domain,
+              company: project.company_name,
+              userRole: project.user_role,
+              companyId: project.company_id,
+              csaMembers: [],
+              quadrantTeam: [],
+              clientMembers: [],
+              timeline: [
+                {
+                  id: 1,
+                  phase: 'Discovery Call',
+                  status: 'completed',
+                  documents: []
+                },
+                {
+                  id: 2,
+                  phase: 'Project Planning',
+                  status: 'in-progress',
+                  documents: []
+                },
+                {
+                  id: 3,
+                  phase: 'Design Phase',
+                  status: 'pending',
+                  documents: []
+                },
+                {
+                  id: 4,
+                  phase: 'Closure',
+                  status: 'pending',
+                  documents: []
+                }
+              ]
+            }))
+          }))
+        };
+        
+        setGroupedProjects(transformedGroupedProjects);
+      }
     } catch (error) {
       console.error('Failed to load user projects:', error);
       setProjectsError('Failed to load projects. Please try again.');
@@ -931,7 +1043,9 @@ function App() {
 
   const handleDeleteProject = (project) => {
     setProjectToDelete(project);
-    setShowDeleteConfirm(true);
+    setAdminCredentials({ email: '', password: '' });
+    setAdminAuthError('');
+    setShowAdminAuth(true);
   };
 
   const confirmDeleteProject = async () => {
@@ -966,6 +1080,46 @@ function App() {
   const cancelDeleteProject = () => {
     setShowDeleteConfirm(false);
     setProjectToDelete(null);
+  };
+
+  const handleAdminAuth = async () => {
+    if (!adminCredentials.email || !adminCredentials.password) {
+      setAdminAuthError('Please enter both email and password');
+      return;
+    }
+
+    setIsAdminAuthenticating(true);
+    setAdminAuthError('');
+
+    try {
+      // Attempt admin login
+      const response = await ApiService.login(adminCredentials.email, adminCredentials.password);
+      
+      // Check if the logged-in user has admin privileges
+      // The backend may return either 'admin' or 'Admin' depending on the API implementation
+      const userRole = response.user?.tag;
+      
+      if (response.user && userRole && userRole.toLowerCase() === 'admin') {
+        // Admin authentication successful, proceed to delete confirmation
+        setShowAdminAuth(false);
+        setShowDeleteConfirm(true);
+        setAdminCredentials({ email: '', password: '' });
+      } else {
+        setAdminAuthError(`Access denied. Admin privileges required to delete projects. Current role: "${userRole || 'unknown'}"`);
+      }
+    } catch (error) {
+      console.error('Admin authentication failed:', error);
+      setAdminAuthError(error.message || 'Authentication failed. Please check your credentials.');
+    } finally {
+      setIsAdminAuthenticating(false);
+    }
+  };
+
+  const cancelAdminAuth = () => {
+    setShowAdminAuth(false);
+    setProjectToDelete(null);
+    setAdminCredentials({ email: '', password: '' });
+    setAdminAuthError('');
   };
 
   const handleSessionClick = async (session) => {
@@ -2144,11 +2298,15 @@ function App() {
               className="back-button" 
               onClick={() => {
                 setShowDashboard(false);
-                setShowPortal(true);
+                if (dashboardFromPortal) {
+                  setShowPortal(true);
+                }
+                // If dashboardFromPortal is false, it will return to chat (homepage)
+                setDashboardFromPortal(false);
               }}
             >
               <FaArrowLeft />
-              <span>Back to Portal</span>
+              <span>{dashboardFromPortal ? 'Back to Portal' : 'Back to Chat'}</span>
             </button>
             <div className="dashboard-title-section">
               <h1 className="dashboard-title">Dashboard</h1>
@@ -2311,6 +2469,7 @@ function App() {
               </button>
               <button className="quick-action-btn" onClick={() => {
                 setShowDashboard(false);
+                setDashboardFromPortal(false);
                 handleOpenPortal();
               }}>
                 <FaFolderOpen />
@@ -2791,7 +2950,10 @@ function App() {
                   <span className="action-icon"><FaArchive /></span>
                   <span className="action-text">Archived chats</span>
                 </div>
-                <div className="quick-action-item" onClick={() => setShowDashboard(true)}>
+                <div className="quick-action-item" onClick={() => {
+                  setDashboardFromPortal(false);
+                  setShowDashboard(true);
+                }}>
                   <span className="action-icon"><FaChartBar /></span>
                   <span className="action-text">Dashboard</span>
                 </div>
@@ -2839,6 +3001,7 @@ function App() {
                   <button 
                     className="nav-button dashboard-btn" 
                     onClick={() => {
+                      setDashboardFromPortal(true);
                       setShowDashboard(true);
                       setShowPortal(false);
                     }}
@@ -2894,6 +3057,24 @@ function App() {
                       <FaSearch />
                     </button>
                   </div>
+                  {/* View Mode Toggle */}
+                  <div className="view-mode-toggle">
+                    <button 
+                      className={`view-mode-btn ${viewMode === 'grouped' ? 'active' : ''}`}
+                      onClick={() => setViewMode('grouped')}
+                    >
+                      <FaFolder />
+                      <span>Grouped</span>
+                    </button>
+                    <button 
+                      className={`view-mode-btn ${viewMode === 'list' ? 'active' : ''}`}
+                      onClick={() => setViewMode('list')}
+                    >
+                      <FaClipboardList />
+                      <span>List</span>
+                    </button>
+                  </div>
+
                   <div className="project-list">
                     {isLoadingProjects ? (
                       <div className="loading-projects">
@@ -2910,6 +3091,118 @@ function App() {
                           <FaSync />
                           <span>Retry</span>
                         </button>
+                      </div>
+                    ) : viewMode === 'grouped' && groupedProjects ? (
+                      <div className="grouped-projects">
+                        {/* Company Folders */}
+                        {groupedProjects.company_folders.length > 0 && (
+                          <div className="folder-section">
+                            <h3 className="folder-section-title">
+                              <FaBuilding className="folder-icon" />
+                              Companies ({groupedProjects.total_companies})
+                            </h3>
+                            {groupedProjects.company_folders.map((folder) => (
+                              <div key={`company-${folder.id}`} className="project-folder">
+                                <div className="folder-header" onClick={() => {
+                                  const folderElement = document.getElementById(`folder-content-${folder.id}`);
+                                  if (folderElement) {
+                                    folderElement.style.display = folderElement.style.display === 'none' ? 'block' : 'none';
+                                  }
+                                }}>
+                                  <div className="folder-info">
+                                    <FaFolder className="folder-icon" />
+                                    <div className="folder-details">
+                                      <h4 className="folder-name">{folder.name}</h4>
+                                      <p className="folder-count">{folder.project_count} project{folder.project_count !== 1 ? 's' : ''}</p>
+                                    </div>
+                                  </div>
+                                  <div className="folder-actions">
+                                    <FaChevronDown className="folder-toggle" />
+                                  </div>
+                                </div>
+                                <div id={`folder-content-${folder.id}`} className="folder-content" style={{display: 'none'}}>
+                                  {folder.projects.map((project) => (
+                                    <div 
+                                      key={project.id}
+                                      className={`project-item ${selectedProject?.id === project.id ? 'selected' : ''}`}
+                                      onClick={() => setSelectedProject(project)}
+                                    >
+                                      <div className="project-header">
+                                        <h3 className="project-title">{project.title}</h3>
+                                        <div className="project-header-actions">
+                                          <span className={`project-status ${getProjectStatus(project).toLowerCase().replace(' ', '-')}`}>
+                                            {(() => {
+                                              const s = getProjectStatus(project);
+                                              if (s === 'In Progress') return 'IP';
+                                              if (s === 'Completed') return 'C';
+                                              if (s === 'New') return 'N';
+                                              return s;
+                                            })()}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Domain Folders */}
+                        {groupedProjects.domain_folders.length > 0 && (
+                          <div className="folder-section">
+                            <h3 className="folder-section-title">
+                              <FaProjectDiagram className="folder-icon" />
+                              Domains ({groupedProjects.total_domains})
+                            </h3>
+                            {groupedProjects.domain_folders.map((folder) => (
+                              <div key={`domain-${folder.id}`} className="project-folder">
+                                <div className="folder-header" onClick={() => {
+                                  const folderElement = document.getElementById(`folder-content-domain-${folder.id}`);
+                                  if (folderElement) {
+                                    folderElement.style.display = folderElement.style.display === 'none' ? 'block' : 'none';
+                                  }
+                                }}>
+                                  <div className="folder-info">
+                                    <FaFolder className="folder-icon" />
+                                    <div className="folder-details">
+                                      <h4 className="folder-name">{folder.name}</h4>
+                                      <p className="folder-count">{folder.project_count} project{folder.project_count !== 1 ? 's' : ''}</p>
+                                    </div>
+                                  </div>
+                                  <div className="folder-actions">
+                                    <FaChevronDown className="folder-toggle" />
+                                  </div>
+                                </div>
+                                <div id={`folder-content-domain-${folder.id}`} className="folder-content" style={{display: 'none'}}>
+                                  {folder.projects.map((project) => (
+                                    <div 
+                                      key={project.id}
+                                      className={`project-item ${selectedProject?.id === project.id ? 'selected' : ''}`}
+                                      onClick={() => setSelectedProject(project)}
+                                    >
+                                      <div className="project-header">
+                                        <h3 className="project-title">{project.title}</h3>
+                                        <div className="project-header-actions">
+                                          <span className={`project-status ${getProjectStatus(project).toLowerCase().replace(' ', '-')}`}>
+                                            {(() => {
+                                              const s = getProjectStatus(project);
+                                              if (s === 'In Progress') return 'IP';
+                                              if (s === 'Completed') return 'C';
+                                              if (s === 'New') return 'N';
+                                              return s;
+                                            })()}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ) : filteredProjects.length > 0 ? (
                       filteredProjects.map((project) => (
@@ -3836,6 +4129,71 @@ function App() {
           </div>
         )}
         
+        {/* Admin Authentication Modal */}
+        {showAdminAuth && (
+          <div className="modal-overlay" onClick={cancelAdminAuth}>
+            <div className="confirmation-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Admin Authentication Required</h3>
+                <button className="modal-close-btn" onClick={cancelAdminAuth}>
+                  <FaTimes />
+                </button>
+              </div>
+              <div className="modal-content">
+                <div className="warning-icon">
+                  <FaUsers />
+                </div>
+                <p>Admin privileges are required to delete projects. Please authenticate with admin credentials.</p>
+                <div className="admin-auth-form">
+                  <div className="form-group">
+                    <label htmlFor="adminEmail">Admin Email:</label>
+                    <input
+                      type="email"
+                      id="adminEmail"
+                      value={adminCredentials.email}
+                      onChange={(e) => setAdminCredentials(prev => ({ ...prev, email: e.target.value }))}
+                      placeholder="Enter admin email"
+                      disabled={isAdminAuthenticating}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="adminPassword">Admin Password:</label>
+                    <input
+                      type="password"
+                      id="adminPassword"
+                      value={adminCredentials.password}
+                      onChange={(e) => setAdminCredentials(prev => ({ ...prev, password: e.target.value }))}
+                      placeholder="Enter admin password"
+                      disabled={isAdminAuthenticating}
+                    />
+                  </div>
+                  {adminAuthError && (
+                    <div className="error-message">
+                      {adminAuthError}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button 
+                  className="cancel-btn" 
+                  onClick={cancelAdminAuth}
+                  disabled={isAdminAuthenticating}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="delete-confirm-btn" 
+                  onClick={handleAdminAuth}
+                  disabled={isAdminAuthenticating}
+                >
+                  {isAdminAuthenticating ? 'Authenticating...' : 'Authenticate'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Delete Project Confirmation Modal */}
         {showDeleteConfirm && (
           <div className="modal-overlay" onClick={cancelDeleteProject}>
