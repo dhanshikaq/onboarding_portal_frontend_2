@@ -275,6 +275,43 @@ class ApiService {
       throw error;
     }
   }
+
+  /**
+   * Get all users for dropdown selection
+   * @returns {Promise<Object>} Response with format:
+   * {
+   *   success: boolean,
+   *   users: Array<{
+   *     user_id: number,
+   *     first_name: string,
+   *     last_name: string,
+   *     email_id: string,
+   *     phone_number: string,
+   *     tag: string
+   *   }>,
+   *   count: number
+   * }
+   */
+  static async getAllUsers() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/list-all/`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to get users');
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 export default ApiService;

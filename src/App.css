@@ -2924,6 +2924,168 @@ body {
   }
 }
 
+/* Project Header Actions */
+.project-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.view-signed-docs-btn {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.view-signed-docs-btn:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+/* Signed Documents Modal */
+.signed-documents-modal {
+  width: 90vw;
+  max-width: 800px;
+  max-height: 80vh;
+}
+
+.signed-documents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.signed-document-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.document-info {
+  flex: 1;
+}
+
+.document-name {
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 4px;
+}
+
+.document-date {
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.document-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.preview-btn, .download-btn {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.preview-btn {
+  background: #007bff;
+  color: white;
+}
+
+.preview-btn:hover {
+  background: #0056b3;
+  transform: translateY(-1px);
+}
+
+.download-btn {
+  background: #28a745;
+  color: white;
+}
+
+.download-btn:hover {
+  background: #1e7e34;
+  transform: translateY(-1px);
+}
+
+.no-signed-documents {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6c757d;
+}
+
+.no-docs-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.no-signed-documents h4 {
+  margin-bottom: 8px;
+  color: #495057;
+}
+
+/* Signed Document Badge */
+.signed-badge {
+  background: linear-gradient(135deg, #28a745, #20c997);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+  display: inline-block;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 1px 3px rgba(40, 167, 69, 0.3);
+}
+
+/* Refresh Documents Button */
+.refresh-docs-btn {
+  background: linear-gradient(135deg, #17a2b8, #138496);
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s;
+  margin-left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.refresh-docs-btn:hover {
+  background: linear-gradient(135deg, #138496, #117a8b);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(23, 162, 184, 0.3);
+}
+
 /* Responsive Design */
 @media (max-width: 1200px) {
   .portal-container {
@@ -4063,6 +4225,85 @@ body {
 .close-upload-btn:hover {
   background: rgba(255, 255, 255, 0.1);
   color: #ffffff;
+}
+
+.phase-selection-container {
+  margin: 20px 0;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.phase-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+.phase-select {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.phase-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.phase-select option {
+  background: #1f2937;
+  color: #ffffff;
+  padding: 8px;
+}
+
+.document-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.document-phase {
+  font-size: 16px;
+  margin-left: 4px;
+}
+
+.document-status-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  margin-left: 8px;
+}
+
+.document-status-badge.in_progress {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.document-status-badge.completed {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.document-status-badge.pending {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 .file-input-container {
@@ -5735,6 +5976,544 @@ body {
   .chat-right-sidebar {
     width: 220px;
   }
+}
+
+/* Clickable Phase Styles */
+.clickable-phase {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.clickable-phase:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+}
+
+.clickable-phase:hover .upload-hint {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.upload-hint {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #007AFF;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  opacity: 0;
+  transition: all 0.3s ease;
+  z-index: 10;
+}
+
+.upload-icon {
+  font-size: 8px;
+}
+
+/* Phase Upload Modal Styles */
+.selected-phase-indicator {
+  background: #007AFF;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  margin-left: 8px;
+  font-weight: 500;
+}
+
+.phase-locked-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: rgba(0, 122, 255, 0.1);
+  border: 1px solid rgba(0, 122, 255, 0.3);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #007AFF;
+}
+
+.lock-icon {
+  font-size: 10px;
+}
+
+.phase-select:disabled {
+  background: #2a2a2a;
+  color: #666;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Phase Info Container Styles */
+.phase-info-container {
+  background: rgba(0, 122, 255, 0.05);
+  border: 1px solid rgba(0, 122, 255, 0.2);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.current-phase-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.phase-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #007AFF;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.phase-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.phase-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #ffffff;
+}
+
+.phase-status {
+  font-size: 12px;
+  color: #007AFF;
+  text-transform: capitalize;
+}
+
+.phase-description {
+  font-size: 12px;
+  color: #888;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Phase View Selector Styles */
+.phase-view-selector {
+  background: rgba(0, 122, 255, 0.05);
+  border: 1px solid rgba(0, 122, 255, 0.2);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.phase-view-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #007AFF;
+  margin-bottom: 8px;
+}
+
+.phase-view-select {
+  width: 100%;
+  padding: 8px 12px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.phase-view-select:focus {
+  outline: none;
+  border-color: #007AFF;
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.2);
+}
+
+.phase-view-select option {
+  background: #1a1a1a;
+  color: #ffffff;
+  padding: 8px;
+}
+
+/* Phase Clicking and Viewing Styles */
+.timeline-step.clickable-phase {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.timeline-step.clickable-phase:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+}
+
+/* Discovery Call Refreshing Styles */
+.timeline-step.refreshing {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+  border: 2px solid #007AFF;
+  box-shadow: 0 0 20px rgba(0, 122, 255, 0.4);
+}
+
+.timeline-step.refreshing .step-indicator {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+  color: #007AFF;
+}
+
+.refreshing-text {
+  color: #007AFF;
+  font-size: 0.8em;
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.timeline-step.clickable-phase:hover .view-hint {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.timeline-step.clickable-phase.selected {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  transform: translateY(-2px);
+}
+
+.view-hint {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #007AFF;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  opacity: 0;
+  transition: all 0.3s ease;
+  z-index: 10;
+}
+
+.view-icon {
+  font-size: 8px;
+}
+
+/* DocuSign Integration Styles */
+.preview-document-btn {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  margin-left: 8px;
+}
+
+.preview-document-btn:hover {
+  background: #0056b3;
+  transform: translateY(-1px);
+}
+
+.download-document-btn {
+  background: #17a2b8;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  margin-left: 8px;
+}
+
+.download-document-btn:hover {
+  background: #138496;
+  transform: translateY(-1px);
+}
+
+.sign-document-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  margin-left: 8px;
+}
+
+.sign-document-btn:hover {
+  background: #218838;
+  transform: translateY(-1px);
+}
+
+.sign-document-btn:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.docusign-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.docusign-modal {
+  background: #1a1a1a;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 1000px;
+  max-height: 90vh;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+.docusign-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background: #2a2a2a;
+  border-bottom: 1px solid #444;
+}
+
+.docusign-modal-header h3 {
+  margin: 0;
+  color: #e0e0e0;
+  font-size: 18px;
+}
+
+.close-docusign-btn {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.close-docusign-btn:hover {
+  background: #444;
+  color: #e0e0e0;
+}
+
+.docusign-status {
+  padding: 15px 20px;
+  background: #2a2a2a;
+  border-bottom: 1px solid #444;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-sent {
+  color: #ffc107;
+  font-weight: 500;
+}
+
+.status-completed {
+  color: #28a745;
+  font-weight: 500;
+}
+
+.status-delivered {
+  color: #17a2b8;
+  font-weight: 500;
+}
+
+.docusign-iframe-container {
+  padding: 20px;
+  background: #1a1a1a;
+}
+
+.docusign-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  color: #999;
+}
+
+.loading-spinner {
+  font-size: 24px;
+  margin-bottom: 10px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.docusign-actions {
+  display: flex;
+  gap: 10px;
+  padding: 20px;
+  background: #2a2a2a;
+  border-top: 1px solid #444;
+  justify-content: flex-end;
+}
+
+.docusign-complete-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.docusign-complete-btn:hover:not(:disabled) {
+  background: #218838;
+  transform: translateY(-1px);
+}
+
+.docusign-complete-btn:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.docusign-cancel-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.docusign-cancel-btn:hover {
+  background: #5a6268;
+  transform: translateY(-1px);
+}
+
+/* Document Preview Styles */
+.preview-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.document-iframe {
+  width: 100%;
+  height: 500px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  background: #f8f9fa;
+}
+
+.preview-fallback {
+  margin-top: 15px;
+  padding: 15px;
+  background: #2a2a2a;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.preview-fallback p {
+  margin-bottom: 10px;
+  color: #e0e0e0;
+  font-size: 14px;
+}
+
+.retry-preview-btn {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-top: 12px;
+  transition: background-color 0.2s;
+}
+
+.retry-preview-btn:hover {
+  background: #0056b3;
+}
+
+.open-external-btn,
+.download-external-btn {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  margin: 0 5px;
+  transition: all 0.3s ease;
+}
+
+.open-external-btn:hover,
+.download-external-btn:hover {
+  background: #0056b3;
+  transform: translateY(-1px);
+}
+
+.download-external-btn {
+  background: #28a745;
+}
+
+.download-external-btn:hover {
+  background: #218838;
+}
+
+.file-url {
+  font-size: 12px;
+  color: #999;
+  word-break: break-all;
+  margin-top: 10px;
 }
 
 

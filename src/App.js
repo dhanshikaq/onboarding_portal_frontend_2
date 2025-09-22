@@ -32,12 +32,16 @@ import {
   FaVolumeUp,
   FaPlay,
   FaChevronLeft,
-  FaChevronRight
+  FaChevronRight,
+  FaSync,
+  FaUpload,
+  FaLock
 } from 'react-icons/fa';
 import './App.css';
 import DocumentPreviewer from './components/DocumentPreviewer';
 import ApiService from './services/api';
 import MarkdownRenderer from './components/MarkdownRenderer';
+import UserSelector from './components/UserSelector';
 
 // Custom Quadra Logo Component
 const QuadraLogo = ({ className = "", size = 24 }) => {
@@ -85,12 +89,47 @@ function App() {
     }
   }, []);
 
-  // Load user sessions when user is available
+  // DocuSign completion message listener
   React.useEffect(() => {
-    if (user?.user_id) {
-      loadUserSessions();
-    }
-  }, [user?.user_id]);
+    const handleMessage = (event) => {
+      console.log('Message received:', event.origin, event.data);
+      
+      // Allow messages from backend (localhost:8000) or same origin
+      const allowedOrigins = [
+        window.location.origin,
+        'http://localhost:8000',
+        'http://127.0.0.1:8000'
+      ];
+      
+      if (!allowedOrigins.includes(event.origin)) {
+        console.log('Message origin not allowed:', event.origin);
+        return;
+      }
+      
+      if (event.data && event.data.type === 'DOCUSIGN_COMPLETE') {
+        console.log('DocuSign completion detected:', event.data);
+        // DON'T handle completion automatically - let webhook show document directly
+        // handleDocuSignComplete(event.data.webhookData);
+      }
+      
+      if (event.data && event.data.type === 'REFRESH_DOCUMENT_LIST') {
+        console.log('Refresh document list requested from webhook');
+        // Refresh the document list when user clicks the refresh button
+        refreshDocumentList();
+      }
+    };
+
+    // Make functions available globally for webhook page to call
+    window.setShowDocuSignModal = setShowDocuSignModal;
+
+    window.addEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      // Clean up global functions
+      delete window.setShowDocuSignModal;
+    };
+  }, []);
+
   const [showSettings, setShowSettings] = useState(false);
   const [showPortal, setShowPortal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
@@ -142,10 +181,28 @@ function App() {
   const [showDocumentUpload, setShowDocumentUpload] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [selectedPhase, setSelectedPhase] = useState('discovery_call');
+  const [activePhaseForUpload, setActivePhaseForUpload] = useState(null);
+  const [projectDocuments, setProjectDocuments] = useState([]);
+  const [selectedPhaseForView, setSelectedPhaseForView] = useState('all');
+  const [phaseDocuments, setPhaseDocuments] = useState([]);
+  const [isRefreshingDiscoveryDocs, setIsRefreshingDiscoveryDocs] = useState(false);
+  
+  // DocuSign integration state
+  const [showDocuSignModal, setShowDocuSignModal] = useState(false);
+  const [signingUrl, setSigningUrl] = useState('');
+  const [docusignLoading, setDocusignLoading] = useState(false);
+  const [envelopeStatus, setEnvelopeStatus] = useState(null);
+  const [documentToSign, setDocumentToSign] = useState(null);
   
   // Document preview state
   const [selectedDocument, setSelectedDocument] = useState(null);
   const [documentPreviewUrl, setDocumentPreviewUrl] = useState(null);
+  const [iframeLoadError, setIframeLoadError] = useState(false);
+  
+  // Signed documents state
+  const [signedDocuments, setSignedDocuments] = useState([]);
+  const [showSignedDocuments, setShowSignedDocuments] = useState(false);
 
   // Phase completion confirmation state
   const [showPhaseConfirmation, setShowPhaseConfirmation] = useState(false);
@@ -156,6 +213,22 @@ function App() {
   // Sidebar visibility state - hidden by default for clean chat interface
   const [isLeftSidebarVisible, setIsLeftSidebarVisible] = useState(false);
   const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(false);
+
+  // Load user sessions when user is available
+  React.useEffect(() => {
+    if (user?.user_id) {
+      loadUserSessions();
+    }
+  }, [user?.user_id]);
+
+  // Load signed documents when a project is selected
+  React.useEffect(() => {
+    if (selectedProject?.id) {
+      loadSignedDocuments(selectedProject.id).then(docs => {
+        setSignedDocuments(docs);
+      });
+    }
+  }, [selectedProject?.id]);
 
   // Close chat options dropdown when clicking outside
   React.useEffect(() => {
@@ -298,157 +371,8 @@ function App() {
     { name: 'Digital Dynamics', industry: 'Marketing' }
   ];
 
-  // Sample projects data
-  const [projects, setProjects] = useState([
-    {
-      id: 1,
-      title: 'E-commerce Platform',
-      description: 'Web Development project for New Tech Corp',
-      status: 'In Progress',
-      projectId: 'PROJ-005',
-      startDate: '2024-01-15',
-      endDate: '2024-06-15',
-      domain: 'Web Development',
-      company: 'New Tech Corp',
-      csaMembers: [
-        { id: 1, name: 'Anirudh Venkataraman', role: 'CSA Lead', email: 'anirudh@quadrant.com', avatar: 'AV' },
-        { id: 2, name: 'Dhanshika Vijayaraj', role: 'CSA Associate', email: 'dhanshika@quadrant.com', avatar: 'DV' }
-      ],
-      quadrantTeam: [
-        { id: 3, name: 'Alex Johnson', role: 'Project Manager', email: 'alex@quadrant.com', avatar: 'AJ' },
-        { id: 4, name: 'Sarah Chen', role: 'Senior Developer', email: 'sarah@quadrant.com', avatar: 'SC' },
-        { id: 5, name: 'Mike Rodriguez', role: 'UI/UX Designer', email: 'mike@quadrant.com', avatar: 'MR' }
-      ],
-      clientMembers: [
-        { id: 6, name: 'David Kim', role: 'CTO', email: 'david@newtechcorp.com', avatar: 'DK' },
-        { id: 7, name: 'Lisa Wang', role: 'Product Manager', email: 'lisa@newtechcorp.com', avatar: 'LW' }
-      ],
-      timeline: [
-        {
-          id: 1,
-          phase: 'Discovery Call',
-          status: 'completed',
-          documents: [
-            { id: 1, name: 'Discovery Call Notes.pdf', type: 'pdf', size: '2.3 MB', uploadedBy: 'Anirudh Venkataraman', uploadedAt: '2024-01-15' },
-            { id: 2, name: 'Requirements Document.docx', type: 'docx', size: '1.8 MB', uploadedBy: 'David Kim', uploadedAt: '2024-01-16' }
-          ]
-        },
-        {
-          id: 2,
-          phase: 'Project Planning',
-          status: 'in-progress',
-          documents: [
-            { id: 3, name: 'Project Plan.pdf', type: 'pdf', size: '3.1 MB', uploadedBy: 'Alex Johnson', uploadedAt: '2024-01-20' },
-            { id: 4, name: 'Timeline.xlsx', type: 'xlsx', size: '0.9 MB', uploadedBy: 'Sarah Chen', uploadedAt: '2024-01-21' }
-          ]
-        },
-        {
-          id: 3,
-          phase: 'Design Phase',
-          status: 'pending',
-          documents: []
-        },
-        {
-          id: 4,
-          phase: 'Closure',
-          status: 'pending',
-          documents: []
-        }
-      ]
-    },
-    {
-      id: 2,
-      title: 'E-commerce Platform',
-      description: 'Web Development project for New Amazonian corps',
-      status: 'In Progress',
-      projectId: 'PROJ-006',
-      startDate: '2024-02-01',
-      endDate: '2024-07-01',
-      domain: 'Web Development',
-      company: 'New Amazonian corps',
-      csaMembers: [
-        { id: 8, name: 'Anirudh Venkataraman', role: 'CSA Lead', email: 'anirudh@quadrant.com', avatar: 'AV' }
-      ],
-      quadrantTeam: [
-        { id: 9, name: 'Tom Wilson', role: 'Project Manager', email: 'tom@quadrant.com', avatar: 'TW' }
-      ],
-      clientMembers: [
-        { id: 10, name: 'Emma Thompson', role: 'CEO', email: 'emma@amazonian.com', avatar: 'ET' }
-      ],
-      timeline: [
-        {
-          id: 1,
-          phase: 'Discovery Call',
-          status: 'completed',
-          documents: []
-        },
-        {
-          id: 2,
-          phase: 'Project Planning',
-          status: 'in-progress',
-          documents: []
-        },
-        {
-          id: 3,
-          phase: 'Design Phase',
-          status: 'pending',
-          documents: []
-        },
-        {
-          id: 4,
-          phase: 'Closure',
-          status: 'pending',
-          documents: []
-        }
-      ]
-    },
-    {
-      id: 3,
-      title: 'Full-Stack E-commerce Platform',
-      description: 'E-commerce & Web Development project for Comprehensive Tech Solutions',
-      status: 'In Progress',
-      projectId: 'PROJ-007',
-      startDate: '2024-01-20',
-      endDate: '2024-08-20',
-      domain: 'E-commerce & Web Development',
-      company: 'Comprehensive Tech Solutions',
-      csaMembers: [
-        { id: 11, name: 'Dhanshika Vijayaraj', role: 'CSA Associate', email: 'dhanshika@quadrant.com', avatar: 'DV' }
-      ],
-      quadrantTeam: [
-        { id: 12, name: 'Chris Lee', role: 'Project Manager', email: 'chris@quadrant.com', avatar: 'CL' }
-      ],
-      clientMembers: [
-        { id: 13, name: 'Rachel Green', role: 'CTO', email: 'rachel@comprehensive.com', avatar: 'RG' }
-      ],
-      timeline: [
-        {
-          id: 1,
-          phase: 'Discovery Call',
-          status: 'completed',
-          documents: []
-        },
-        {
-          id: 2,
-          phase: 'Project Planning',
-          status: 'pending',
-          documents: []
-        },
-        {
-          id: 3,
-          phase: 'Design Phase',
-          status: 'pending',
-          documents: []
-        },
-        {
-          id: 4,
-          phase: 'Closure',
-          status: 'pending',
-          documents: []
-        }
-      ]
-    }
-  ]);
+  // Projects data - loaded from API
+  const [projects, setProjects] = useState([]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -533,6 +457,27 @@ function App() {
     });
   };
 
+  const handleCSAMembersChange = (selectedUsers) => {
+    setOnboardingData(prevState => ({
+      ...prevState,
+      csaMembers: selectedUsers
+    }));
+  };
+
+  const handleQuadrantTeamChange = (selectedUsers) => {
+    setOnboardingData(prevState => ({
+      ...prevState,
+      quadrantTeam: selectedUsers
+    }));
+  };
+
+  const handleClientMembersChange = (selectedUsers) => {
+    setOnboardingData(prevState => ({
+      ...prevState,
+      clientMembers: selectedUsers
+    }));
+  };
+
   const handleOnboardingSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
@@ -550,14 +495,17 @@ function App() {
           end_date: onboardingData.endDate || null,
           domain: onboardingData.projectDomain || null
         },
-        user_assignments: [
-          // Add current user as default assignment
-          {
-            user_id: user?.user_id || 'current_user',
-            role: user?.tag || 'client'
-          }
-          // Additional user assignments can be added here based on the form data
-        ]
+        user_assignments: {
+          csa_users: onboardingData.csaMembers.map(user => ({
+            user_id: user.user_id
+          })),
+          quadrant_users: onboardingData.quadrantTeam.map(user => ({
+            user_id: user.user_id
+          })),
+          client_users: onboardingData.clientMembers.map(user => ({
+            user_id: user.user_id
+          }))
+        }
       };
 
       // Call the API to create the project
@@ -576,9 +524,27 @@ function App() {
         endDate: onboardingData.endDate || 'TBD',
         domain: onboardingData.projectDomain || 'General',
         company: onboardingData.company,
-        csaMembers: [],
-        quadrantTeam: [],
-        clientMembers: [],
+        csaMembers: onboardingData.csaMembers.map(user => ({
+          id: user.user_id,
+          name: user.first_name && user.last_name ? `${user.first_name} ${user.last_name}` : user.email_id,
+          role: 'CSA Member',
+          email: user.email_id,
+          avatar: (user.first_name || user.email_id).substring(0, 2).toUpperCase()
+        })),
+        quadrantTeam: onboardingData.quadrantTeam.map(user => ({
+          id: user.user_id,
+          name: user.first_name && user.last_name ? `${user.first_name} ${user.last_name}` : user.email_id,
+          role: 'Quadrant Team Member',
+          email: user.email_id,
+          avatar: (user.first_name || user.email_id).substring(0, 2).toUpperCase()
+        })),
+        clientMembers: onboardingData.clientMembers.map(user => ({
+          id: user.user_id,
+          name: user.first_name && user.last_name ? `${user.first_name} ${user.last_name}` : user.email_id,
+          role: 'Client Member',
+          email: user.email_id,
+          avatar: (user.first_name || user.email_id).substring(0, 2).toUpperCase()
+        })),
         timeline: [
           {
             id: 1,
@@ -763,7 +729,9 @@ function App() {
   };
 
   const loadUserProjects = async () => {
-    if (!user?.user_id) return;
+    if (!user?.user_id) {
+      return;
+    }
     
     setIsLoadingProjects(true);
     setProjectsError(null);
@@ -772,56 +740,100 @@ function App() {
       
       if (response.success && response.projects) {
         // Transform the API response to match the expected project format
-        const transformedProjects = response.projects.map(project => ({
-          id: project.project_id,
-          title: project.project_name,
-          description: `${project.domain} project for ${project.company_name}`,
-          status: 'In Progress', // Default status since API doesn't provide it
-          projectId: `PROJ-${project.project_id.toString().padStart(3, '0')}`,
-          startDate: project.start_date,
-          endDate: project.end_date,
-          domain: project.domain,
-          company: project.company_name,
-          userRole: project.user_role,
-          companyId: project.company_id,
-          // Default team members structure (can be enhanced later)
-          csaMembers: [],
-          quadrantTeam: [],
-          clientMembers: [],
-          timeline: [
+        const transformedProjects = response.projects.map(project => {
+          // For admin users, use the assigned_users data from API
+          let teamMembers = { csaMembers: [], quadrantTeam: [], clientMembers: [] };
+          
+          if (response.is_admin_view && project.assigned_users) {
+            // Group assigned users by role
+            project.assigned_users.forEach(user => {
+              const teamMember = {
+                id: user.user_id,
+                name: user.name,
+                role: user.role === 'CSA' ? 'CSA Member' : 
+                      user.role === 'Quadrant' ? 'Quadrant Team Member' : 
+                      'Client Member',
+                email: user.email,
+                avatar: user.name.substring(0, 2).toUpperCase()
+              };
+              
+              if (user.role === 'CSA') {
+                teamMembers.csaMembers.push(teamMember);
+              } else if (user.role === 'Quadrant') {
+                teamMembers.quadrantTeam.push(teamMember);
+              } else {
+                teamMembers.clientMembers.push(teamMember);
+              }
+            });
+          }
+          
+          return {
+            id: project.project_id,
+            title: project.project_name,
+            description: `${project.domain || 'General'} project for ${project.company_name}`,
+            status: 'In Progress', // Default status since API doesn't provide it
+            projectId: `PROJ-${project.project_id.toString().padStart(3, '0')}`,
+            startDate: project.start_date,
+            endDate: project.end_date,
+            domain: project.domain,
+            company: project.company_name,
+            userRole: project.user_role,
+            companyId: project.company_id,
+            isAdminView: response.is_admin_view,
+            // Use team members from API or default empty arrays
+            csaMembers: teamMembers.csaMembers,
+            quadrantTeam: teamMembers.quadrantTeam,
+            clientMembers: teamMembers.clientMembers,
+            timeline: [
             {
               id: 1,
               phase: 'Discovery Call',
+              phase_key: 'discovery_call',
               status: 'completed',
               documents: []
             },
             {
               id: 2,
               phase: 'Project Planning',
+              phase_key: 'project_planning',
               status: 'in-progress',
               documents: []
             },
             {
               id: 3,
               phase: 'Design Phase',
+              phase_key: 'design_phase',
               status: 'pending',
               documents: []
             },
             {
               id: 4,
               phase: 'Closure',
+              phase_key: 'closure',
               status: 'pending',
               documents: []
             }
           ]
-        }));
+        };
+        });
         
         setProjects(transformedProjects);
+        
+        // Automatically select the first project if none is selected
+        if (transformedProjects.length > 0 && !selectedProject) {
+          const firstProject = transformedProjects[0];
+          setSelectedProject(firstProject);
+          // Load documents for the auto-selected project
+          const documents = await loadAllProjectDocuments(firstProject.id);
+          setProjectDocuments(documents);
+          console.log('Auto-selected first project:', firstProject);
+          console.log('Loaded documents for auto-selected project:', documents);
+        }
       }
     } catch (error) {
       console.error('Failed to load user projects:', error);
       setProjectsError('Failed to load projects. Please try again.');
-      // Keep the existing sample projects as fallback
+      // No fallback projects - user needs to create projects or fix API connection
     } finally {
       setIsLoadingProjects(false);
     }
@@ -830,6 +842,67 @@ function App() {
   const handleOpenPortal = async () => {
     setShowPortal(true);
     await loadUserProjects();
+  };
+
+  const handleProjectSelect = async (project) => {
+    console.log('🔄 Selecting project:', project.title, 'ID:', project.id);
+    setSelectedProject(project);
+    
+    // Load documents for the selected project
+    console.log('📄 Loading documents for project:', project.id);
+    const documents = await loadAllProjectDocuments(project.id);
+    console.log('📄 Loaded documents:', documents);
+    setProjectDocuments(documents);
+    
+    // Also load signed documents
+    console.log('📋 Loading signed documents for project:', project.id);
+    const signedDocs = await loadSignedDocuments(project.id);
+    console.log('📋 Loaded signed documents:', signedDocs);
+    setSignedDocuments(signedDocs);
+    
+    console.log('✅ Project selection complete:', { project: project.title, documentCount: documents.length, signedCount: signedDocs.length });
+  };
+
+  const handlePhaseViewChange = async (phase) => {
+    console.log(`Phase clicked: ${phase}`);
+    setSelectedPhaseForView(phase);
+    if (selectedProject) {
+      console.log(`Loading documents for project ${selectedProject.id}, phase ${phase}`);
+      
+      // If discovery call phase is clicked, refresh all project documents first
+      if (phase === 'discovery_call') {
+        console.log('🔄 Discovery call clicked - refreshing latest documents...');
+        setIsRefreshingDiscoveryDocs(true);
+        try {
+          // Load all project documents to get the latest
+          const allDocuments = await loadAllProjectDocuments(selectedProject.id);
+          console.log('📄 Latest documents loaded:', allDocuments);
+          
+          // Filter documents for discovery call phase
+          const discoveryDocuments = allDocuments.filter(doc => 
+            doc.phase === 'discovery_call' || 
+            doc.phase_key === 'discovery_call' ||
+            (doc.activity_type && doc.activity_type.includes('discovery'))
+          );
+          
+          setPhaseDocuments(discoveryDocuments);
+          console.log(`✅ Discovery call documents refreshed:`, discoveryDocuments);
+        } catch (error) {
+          console.error('❌ Error refreshing discovery call documents:', error);
+          // Fallback to regular phase loading
+          const documents = await loadDocumentsByPhase(selectedProject.id, phase);
+          setPhaseDocuments(documents);
+        } finally {
+          setIsRefreshingDiscoveryDocs(false);
+        }
+      } else {
+        // For other phases, use regular loading
+        const documents = await loadDocumentsByPhase(selectedProject.id, phase);
+        setPhaseDocuments(documents);
+        console.log(`Switched to view phase ${phase}:`, documents);
+        console.log(`API called: http://localhost:8000/api/status/projects/${selectedProject.id}/documents/phase/${phase}/`);
+      }
+    }
   };
 
   const handleSessionClick = async (session) => {
@@ -1097,7 +1170,9 @@ function App() {
                   timestamp: new Date(),
                   type: 'file',
                   fileName: "SOW_Agentic_AI_Platform.pdf",
-                  fileSize: "150 KB"
+                  fileSize: "150 KB",
+                  status_id: 22, // Use the actual status_id from your signed document
+                  url: "http://localhost:8000/api/status/documents/serve/22/"
                 };
                 
                 return prevChats.map(chat => {
@@ -1510,11 +1585,11 @@ function App() {
     
     // Create new project object
     const newProject = {
-      id: Date.now(),
+      id: response.data.project_id,
       title: projectName,
       description: `${projectName} project for ${company}`,
       status: 'New',
-      projectId: `PROJ-${String(Date.now()).slice(-6)}`,
+      projectId: `PROJ-${String(response.data.project_id).padStart(6, '0')}`,
       startDate: new Date().toISOString().split('T')[0],
       endDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 6 months from now
       domain: domain,
@@ -1670,30 +1745,104 @@ function App() {
     setUploadedFiles(files);
   };
 
+  const handlePhaseClick = (phase) => {
+    // Set the active phase for upload and open the upload modal
+    setActivePhaseForUpload(phase);
+    setSelectedPhase(phase.phase_key || phase.phase.toLowerCase().replace(/\s+/g, '_'));
+    setShowDocumentUpload(true);
+  };
+
+  const getCurrentActivePhase = () => {
+    if (!selectedProject) {
+      console.log('getCurrentActivePhase: No selectedProject');
+      return null;
+    }
+    
+    console.log('getCurrentActivePhase: selectedProject timeline:', selectedProject.timeline);
+    
+    // First, try to find a phase with 'in-progress' status
+    let activePhase = selectedProject.timeline.find(phase => phase.status === 'in-progress');
+    
+    // If no 'in-progress' phase found, look for the most recent completed phase
+    // This handles cases where all phases might be completed or there's a data issue
+    if (!activePhase) {
+      console.log('getCurrentActivePhase: No in-progress phase found, looking for most recent phase');
+      activePhase = selectedProject.timeline[selectedProject.timeline.length - 1];
+    }
+    
+    console.log('getCurrentActivePhase: found active phase:', activePhase);
+    
+    return activePhase;
+  };
+
   const handleDocumentUpload = async () => {
     if (!selectedProject || uploadedFiles.length === 0) return;
+    
+    // Auto-detect current active phase
+    const currentPhase = getCurrentActivePhase();
+    if (!currentPhase) {
+      alert('No active phase found. Please ensure the project has an active phase.');
+      return;
+    }
+    
+    // Set the phase for upload - use the phase_key from the timeline
+    const phaseKey = currentPhase.phase_key || currentPhase.phase.toLowerCase().replace(/\s+/g, '_');
+    setSelectedPhase(phaseKey);
+    
+    console.log('Phase conversion:', {
+      originalPhase: currentPhase.phase,
+      phaseKey: currentPhase.phase_key,
+      convertedKey: phaseKey,
+      selectedPhase: selectedPhase
+    });
+    
+    console.log('Selected project for upload:', selectedProject);
+    console.log('Current active phase:', currentPhase);
+    console.log('Uploaded files:', uploadedFiles);
     
     setIsUploading(true);
     
     try {
-      // Find the current active phase (in-progress or completed)
-      const currentPhase = selectedProject.timeline.find(p => p.status === 'in-progress') || 
-                          selectedProject.timeline.find(p => p.status === 'completed');
-      
-      if (!currentPhase) {
-        alert('No active phase found for document upload');
+      // Upload each file to the backend with phase information
+      const uploadPromises = uploadedFiles.map(async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        // Ensure we have a valid project ID
+        const projectId = selectedProject?.id || selectedProject?.project_id;
+        if (!projectId) {
+          alert('No project selected. Please select a project first.');
         return;
       }
-
-      // Create new documents with uploaded file info
+        formData.append('project_id', projectId);
+        formData.append('phase', selectedPhase);
+        formData.append('activity_type', file.name.split('.')[0]); // Use filename as activity type
+        
+        const response = await fetch('http://localhost:8000/api/status/documents/upload/', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to upload ${file.name}`);
+        }
+        
+        return response.json();
+      });
+      
+      const uploadResults = await Promise.all(uploadPromises);
+      
+      // Create new documents with uploaded file info and backend response
       const newDocuments = uploadedFiles.map((file, index) => ({
-        id: Date.now() + index,
+        id: uploadResults[index]?.data?.status_id || Date.now() + index,
         name: file.name,
         type: file.name.split('.').pop().toLowerCase(),
         size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+        phase: selectedPhase,
         uploadedBy: user?.name || 'Current User',
         uploadedAt: new Date().toISOString().split('T')[0],
-        file: file // Store the actual file object for preview
+        file: file, // Store the actual file object for preview
+        blobUrl: uploadResults[index]?.data?.blob_url,
+        status: uploadResults[index]?.data?.status || 'in_progress'
       }));
 
       // Update the project timeline with new documents
@@ -1702,7 +1851,8 @@ function App() {
           return {
             ...project,
             timeline: project.timeline.map(phase => {
-              if (phase.id === currentPhase.id) {
+              // Find the phase that matches the selected phase
+              if (phase.phase_key === selectedPhase || phase.phase.toLowerCase().replace(/\s+/g, '_') === selectedPhase) {
                 return {
                   ...phase,
                   documents: [...(phase.documents || []), ...newDocuments]
@@ -1721,11 +1871,16 @@ function App() {
       const updatedSelectedProject = updatedProjects.find(p => p.id === selectedProject.id);
       setSelectedProject(updatedSelectedProject);
       
+      // Reload documents from backend
+      const updatedDocuments = await loadAllProjectDocuments(selectedProject.id);
+      setProjectDocuments(updatedDocuments);
+      
       // Reset upload state
       setUploadedFiles([]);
       setShowDocumentUpload(false);
+      setSelectedPhase('discovery_call'); // Reset to default
       
-      alert('Documents uploaded successfully!');
+      alert(`Documents uploaded successfully to ${selectedPhase} phase!`);
     } catch (error) {
       console.error('Document upload error:', error);
       alert('Failed to upload documents. Please try again.');
@@ -1738,15 +1893,391 @@ function App() {
     setUploadedFiles(uploadedFiles.filter((_, i) => i !== index));
   };
 
-  const handleDocumentSelect = (document) => {
-    setSelectedDocument(document);
+  const loadProjectDocuments = async (projectId) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/status/projects/${projectId}/documents/`);
+      if (response.ok) {
+        const data = await response.json();
+        return data.data?.documents || [];
+      }
+    } catch (error) {
+      console.error('Error loading project documents:', error);
+    }
+    return [];
+  };
+
+  const refreshDocumentList = async () => {
+    if (!selectedProject) return;
     
-    // Create preview URL for the document
+    console.log('Refreshing document list...');
+    try {
+      const updatedDocuments = await loadAllProjectDocuments(selectedProject.id);
+      setProjectDocuments(updatedDocuments);
+      
+      // Also refresh phase documents if we're viewing a specific phase
+      if (selectedPhaseForView !== 'all') {
+        const phaseDocuments = await loadDocumentsByPhase(selectedProject.id, selectedPhaseForView);
+        setPhaseDocuments(phaseDocuments);
+      }
+      
+      console.log('Document list refreshed:', updatedDocuments);
+    } catch (error) {
+      console.error('Error refreshing document list:', error);
+    }
+  };
+
+  const loadProjectDocumentsByPhase = async (projectId, phase) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/status/projects/${projectId}/documents/phase/${phase}/`);
+      if (response.ok) {
+        const data = await response.json();
+        return data.data?.documents || [];
+      }
+    } catch (error) {
+      console.error('Error loading project documents by phase:', error);
+    }
+    return [];
+  };
+
+  const loadAllProjectDocuments = async (projectId) => {
+    try {
+      console.log('🌐 Fetching documents from API for project:', projectId);
+      const response = await fetch(`http://localhost:8000/api/status/projects/${projectId}/documents/`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🌐 API Response:', data);
+        const documents = data.data?.documents || [];
+        console.log('📄 Parsed documents:', documents);
+        
+        // Check if any documents are signed
+        const signedCount = documents.filter(doc => doc.activity_type?.includes('SIGNED')).length;
+        console.log('✅ Found signed documents:', signedCount);
+        
+        return documents;
+      } else {
+        console.error('❌ API response not ok:', response.status, response.statusText);
+        return [];
+      }
+    } catch (error) {
+      console.error('❌ Error loading all project documents:', error);
+      return [];
+    }
+  };
+
+  const loadDocumentsByPhase = async (projectId, phase) => {
+    try {
+      if (phase === 'all') {
+        return await loadAllProjectDocuments(projectId);
+      } else {
+        const response = await fetch(`http://localhost:8000/api/status/projects/${projectId}/documents/phase/${phase}/`);
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`Loaded documents for phase ${phase}:`, data);
+          return data.data?.documents || [];
+        }
+      }
+    } catch (error) {
+      console.error(`Error loading documents for phase ${phase}:`, error);
+      return [];
+    }
+    return [];
+  };
+
+  // Function to load signed documents for a project
+  const loadSignedDocuments = async (projectId) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/status/projects/${projectId}/signed-documents/`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Loaded signed documents:', data);
+        return data.data?.documents || [];
+      }
+    } catch (error) {
+      console.error('Error loading signed documents:', error);
+      return [];
+    }
+    return [];
+  };
+
+  // Function to preview a signed document
+  const previewSignedDocument = (document) => {
+    console.log('Previewing signed document:', document);
+    
+    // Set the document for preview
+    setSelectedDocument({
+      status_id: document.status_id,
+      activity_type: document.activity_type,
+      fileName: document.activity_type
+    });
+    
+    // Set the preview URL
+    const previewUrl = `http://localhost:8000${document.preview_url}`;
+    setDocumentPreviewUrl(previewUrl);
+    
+    // Set the preview file
+    setPreviewFile({
+      fileName: document.activity_type,
+      fileType: 'pdf',
+      fileSize: "PDF Document",
+      status_id: document.status_id,
+      url: previewUrl
+    });
+    
+    // Show the document previewer
+    setShowDocumentPreviewer(true);
+  };
+
+  // DocuSign integration functions
+  const initiateDocuSign = async (document) => {
+    setDocumentToSign(document);
+    setDocusignLoading(true);
+    setSigningUrl('');
+    
+    try {
+      const response = await fetch('http://localhost:8000/api/status/docusign/get_signing_url/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: 'client@example.com', 
+          name: 'Client Name',
+          document_name: document.activity_type || 'Document'
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSigningUrl(data.signing_url);
+        setShowDocuSignModal(true);
+        setEnvelopeStatus('sent');
+        
+        // Also set the document for preview
+        setSelectedDocument(document);
+        // Use the backend serve endpoint for preview, not the DocuSign URL
+        if (document?.status_id) {
+          const previewUrl = `http://localhost:8000/api/status/documents/serve/${document.status_id}/`;
+          setDocumentPreviewUrl(previewUrl);
+        } else {
+          setDocumentPreviewUrl(data.signing_url);
+        }
+      } else {
+        alert('Failed to initiate DocuSign process');
+      }
+    } catch (error) {
+      console.error('DocuSign error:', error);
+      alert('Failed to initiate DocuSign process');
+    }
+    
+    setDocusignLoading(false);
+  };
+
+  const checkEnvelopeStatus = async (envelopeId) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/status/envelope/${envelopeId}/status/`);
+      if (response.ok) {
+        const data = await response.json();
+        setEnvelopeStatus(data.status);
+        return data.status;
+      }
+    } catch (error) {
+      console.error('Error checking envelope status:', error);
+    }
+    return null;
+  };
+
+  const handleDocuSignComplete = async (webhookData = null) => {
+    console.log('handleDocuSignComplete called with:', webhookData);
+    
+    // Don't close the modal immediately - let the webhook page handle it
+    // setShowDocuSignModal(false);
+    setSigningUrl('');
+    setEnvelopeStatus('completed');
+    
+    // Refresh the document list to show the updated signed document
+    if (selectedProject) {
+      console.log('Refreshing document list after DocuSign completion...');
+      try {
+        const updatedDocuments = await loadAllProjectDocuments(selectedProject.id);
+        setProjectDocuments(updatedDocuments);
+        
+        // Also refresh phase documents if we're viewing a specific phase
+        if (selectedPhaseForView !== 'all') {
+          const phaseDocuments = await loadDocumentsByPhase(selectedProject.id, selectedPhaseForView);
+          setPhaseDocuments(phaseDocuments);
+        }
+        
+        console.log('Document list refreshed with signed documents:', updatedDocuments);
+      } catch (error) {
+        console.error('Error refreshing document list after DocuSign:', error);
+      }
+    }
+    
+    // Use webhook data if available, otherwise fallback to manual completion
+    let previewUrl = null;
+    let documentId = null;
+    let documentName = null;
+    
+    if (webhookData && webhookData.success && webhookData.preview_url) {
+      // Use the preview URL from the webhook response
+      previewUrl = `http://localhost:8000${webhookData.preview_url}`;
+      documentId = webhookData.document_id;
+      documentName = webhookData.document_name || "Signed Document";
+      console.log('Using webhook preview URL:', previewUrl);
+      console.log('Document name from webhook:', documentName);
+    } else if (documentToSign?.status_id) {
+      // Fallback to manual completion
+      previewUrl = `http://localhost:8000/api/status/documents/serve/${documentToSign.status_id}/`;
+      documentId = documentToSign.status_id;
+      documentName = documentToSign.activity_type || "Signed Document";
+      console.log('Using fallback preview URL:', previewUrl);
+    }
+    
+    if (previewUrl) {
+      console.log('Setting document preview with URL:', previewUrl);
+      console.log('Document to sign:', documentToSign);
+      
+      // Keep the document selected for preview
+      setSelectedDocument(documentToSign);
+      setDocumentPreviewUrl(previewUrl);
+      
+      // Show the document previewer
+      setShowDocumentPreviewer(true);
+      setPreviewFile({
+        fileName: documentName || documentToSign?.activity_type || "Signed Document.pdf",
+        fileType: 'pdf',
+        fileSize: "PDF Document",
+        status_id: documentId,
+        url: previewUrl
+      });
+      
+      // Add a signed document message to the current chat
+      const signedDocumentMessage = {
+        id: Date.now(),
+        text: webhookData ? "Document has been signed successfully!" : "Document signing completed!",
+        isBot: true,
+        timestamp: new Date(),
+        type: 'text'
+      };
+      
+      const signedFileMessage = {
+        id: Date.now() + 1,
+        text: documentName || documentToSign?.activity_type || "Signed Document.pdf",
+        isBot: true,
+        timestamp: new Date(),
+        type: 'file',
+        fileName: documentName || documentToSign?.activity_type || "Signed Document.pdf",
+        fileSize: "PDF Document",
+        status_id: documentId,
+        url: previewUrl
+      };
+      
+      console.log('Created signed file message:', signedFileMessage);
+      
+      // Add messages to current chat
+      setChats(prevChats => {
+        return prevChats.map(chat => {
+          if (chat.id === currentChatId) {
+            return {
+              ...chat,
+              messages: [...chat.messages, signedDocumentMessage, signedFileMessage]
+            };
+          }
+          return chat;
+        });
+      });
+    } else {
+      setDocumentPreviewUrl(documentToSign?.location);
+    }
+    alert('Document signed successfully!');
+  };
+
+  const handleDocumentSelect = async (document) => {
+    console.log('Document selected for preview:', document);
+    console.log('Document location:', document.location);
+    console.log('Document file:', document.file);
+    setSelectedDocument(document);
+    setIframeLoadError(false); // Reset error state
+    
+    // Create preview URL for the document - ONLY for preview, not download
     if (document.file) {
+      // For uploaded files (local files)
       const url = URL.createObjectURL(document.file);
       setDocumentPreviewUrl(url);
+      console.log('Using file URL for preview:', url);
+    } else if (document.status_id) {
+      // For documents from API - try to get the latest version by type first
+      let previewUrl = null;
+      
+      try {
+        // Extract document type from activity_type (e.g., "SOW", "NDA", etc.)
+        // Handle cases like "discovery_call_Quadrant TJH SoW 1" -> "Quadrant TJH SoW 1"
+        let documentType = document.activity_type;
+        if (document.activity_type?.includes('_')) {
+          const parts = document.activity_type.split('_');
+          documentType = parts.slice(1).join('_'); // Take everything after the first underscore
+        }
+        
+        // Try to get the latest document of this type
+        const response = await fetch(`http://localhost:8000/api/status/projects/${selectedProject?.id}/documents/latest/${documentType}/url/`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            previewUrl = `http://localhost:8000${data.data.serve_url}`;
+            console.log('Using latest document by type:', previewUrl);
+            console.log('Document is signed:', data.data.is_signed);
+          }
+        }
+      } catch (error) {
+        console.log('Could not get latest document by type, falling back to specific document:', error);
+      }
+      
+      // Fallback to specific document if latest by type fails
+      if (!previewUrl) {
+        previewUrl = `http://localhost:8000/api/status/documents/serve/${document.status_id}/`;
+        console.log('Using backend serve endpoint for preview:', previewUrl);
+      }
+      
+      setDocumentPreviewUrl(previewUrl);
     } else {
       setDocumentPreviewUrl(null);
+      console.log('No preview URL available for document - missing status_id');
+    }
+  };
+
+  const handleDocuSignPreview = async (document) => {
+    setDocumentToSign(document);
+    setDocusignLoading(true);
+    setSigningUrl('');
+    
+    try {
+      const response = await fetch('http://localhost:8000/api/status/docusign/get_signing_url/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: 'client@example.com', 
+          name: 'Client Name',
+          document_name: document.activity_type || 'Document'
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSigningUrl(data.signing_url);
+        setShowDocuSignModal(true);
+        setEnvelopeStatus('sent');
+        
+        // Set the document for DocuSign preview
+        setSelectedDocument(document);
+        setDocumentPreviewUrl(data.signing_url);
+        console.log('DocuSign preview URL set:', data.signing_url);
+      } else {
+        alert('Failed to initiate DocuSign process');
+      }
+    } catch (error) {
+      console.error('DocuSign error:', error);
+      alert('Error initiating DocuSign process');
+    } finally {
+      setDocusignLoading(false);
     }
   };
 
@@ -2020,6 +2551,16 @@ function App() {
                           <div className="file-info" onClick={() => {
                             setPreviewFile(message);
                             setShowDocumentPreviewer(true);
+                            
+                            // Set the document preview URL based on the message
+                            if (message?.status_id) {
+                              const previewUrl = `http://localhost:8000/api/status/documents/serve/${message.status_id}/`;
+                              setDocumentPreviewUrl(previewUrl);
+                            } else if (message?.url) {
+                              setDocumentPreviewUrl(message.url);
+                            } else {
+                              setDocumentPreviewUrl(null);
+                            }
                           }}>
                             <FaPaperclip className="file-icon" />
                             <span className="file-name">{message.fileName}</span>
@@ -2092,6 +2633,7 @@ function App() {
         {showDocumentPreviewer && previewFile && (
           <DocumentPreviewer
             file={previewFile}
+            documentUrl={documentPreviewUrl}
             onClose={() => {
               setShowDocumentPreviewer(false);
               setPreviewFile(null);
@@ -2106,7 +2648,7 @@ function App() {
             <div className="sidebar-section">
               <h3 className="section-title">Quick Actions</h3>
               <div className="quick-actions-list">
-                <div className="quick-action-item" onClick={() => setShowPortal(true)}>
+                <div className="quick-action-item" onClick={handleOpenPortal}>
                   <span className="action-icon"><FaSignOutAlt /></span>
                   <span className="action-text">Take me to portal</span>
                 </div>
@@ -2158,8 +2700,15 @@ function App() {
                     <span>Back to Chat</span>
                   </button>
                   <div className="portal-title-section">
-                    <h1 className="portal-title">Client Onboarding Portal</h1>
-                    <p className="portal-subtitle">Manage your projects and client relationships</p>
+                    <h1 className="portal-title">
+                      {user?.tag?.toLowerCase() === 'admin' ? 'Admin Portal - All Projects' : 'Client Onboarding Portal'}
+                    </h1>
+                    <p className="portal-subtitle">
+                      {user?.tag?.toLowerCase() === 'admin' 
+                        ? 'Manage all projects and client relationships across the system' 
+                        : 'Manage your projects and client relationships'
+                      }
+                    </p>
                   </div>
                 </div>
                 <div className="portal-user-info">
@@ -2217,7 +2766,7 @@ function App() {
                         <div 
                           key={project.id}
                           className={`project-item ${selectedProject?.id === project.id ? 'selected' : ''}`}
-                          onClick={() => setSelectedProject(project)}
+                          onClick={() => handleProjectSelect(project)}
                         >
                           <div className="project-header">
                             <h3 className="project-title">{project.title}</h3>
@@ -2250,9 +2799,26 @@ function App() {
                       <div className="project-header">
                         <h3 className="project-title">{selectedProject.title}</h3>
                         <p className="project-description">{selectedProject.description}</p>
-                        <span className={`project-status ${getProjectStatus(selectedProject).toLowerCase().replace(' ', '-')}`}>
-                          {getProjectStatus(selectedProject)}
-                        </span>
+                        <div className="project-header-actions">
+                          <span className={`project-status ${getProjectStatus(selectedProject).toLowerCase().replace(' ', '-')}`}>
+                            {getProjectStatus(selectedProject)}
+                          </span>
+                          <button 
+                            className="refresh-docs-btn"
+                            onClick={refreshDocumentList}
+                            title="Refresh document list"
+                          >
+                            🔄 Refresh Documents
+                          </button>
+                          {signedDocuments.length > 0 && (
+                            <button 
+                              className="view-signed-docs-btn"
+                              onClick={() => setShowSignedDocuments(true)}
+                            >
+                              <FaFileContract /> View Signed Documents ({signedDocuments.length})
+                            </button>
+                          )}
+                        </div>
                       </div>
                       
                       <div className="project-info-section">
@@ -2355,13 +2921,27 @@ function App() {
                         <div className="timeline-bar">
                           <div className="timeline-steps">
                             {selectedProject.timeline.map((phase, index) => (
-                              <div key={phase.id} className={`timeline-step ${phase.status === 'in-progress' ? 'active' : phase.status === 'completed' ? 'completed' : 'pending'}`}>
+                              <div 
+                                key={phase.id} 
+                                className={`timeline-step clickable-phase ${phase.status === 'in-progress' ? 'active' : phase.status === 'completed' ? 'completed' : 'pending'} ${selectedPhaseForView === phase.phase_key ? 'selected' : ''} ${isRefreshingDiscoveryDocs && phase.phase_key === 'discovery_call' ? 'refreshing' : ''}`}
+                                onClick={() => handlePhaseViewChange(phase.phase_key)}
+                                title={`Click to view documents in ${phase.phase}${phase.phase_key === 'discovery_call' ? ' (refreshes latest documents)' : ''}`}
+                              >
                                 <div className="step-indicator">
-                                  {phase.status === 'completed' && <FaCheckDouble />}
-                                  {phase.status === 'in-progress' && <FaClock />}
-                                  {phase.status === 'pending' && <FaCircle />}
+                                  {isRefreshingDiscoveryDocs && phase.phase_key === 'discovery_call' && <FaSync className="spinning" />}
+                                  {!isRefreshingDiscoveryDocs && phase.status === 'completed' && <FaCheckDouble />}
+                                  {!isRefreshingDiscoveryDocs && phase.status === 'in-progress' && <FaClock />}
+                                  {!isRefreshingDiscoveryDocs && phase.status === 'pending' && <FaCircle />}
                                 </div>
-                                <span className="step-label">{phase.phase}</span>
+                                <span className="step-label">
+                                  {phase.phase}
+                                  {isRefreshingDiscoveryDocs && phase.phase_key === 'discovery_call' && (
+                                    <span className="refreshing-text"> (Refreshing...)</span>
+                                  )}
+                                </span>
+                                <div className="view-hint">
+                                  <FaEye className="view-icon" />
+                                </div>
                                 {index < selectedProject.timeline.length - 1 && (
                                   <div className="step-connector"></div>
                                 )}
@@ -2375,7 +2955,7 @@ function App() {
                           {/* Left Panel - Documents */}
                           <div className="documents-panel">
                             <div className="panel-header">
-                              <h5 className="panel-title">Documents - {selectedProject.timeline.find(p => p.status === 'in-progress')?.phase || 'No Active Phase'}</h5>
+                              <h5 className="panel-title">Documents</h5>
                               <button 
                                 className="add-document-btn"
                                 onClick={() => setShowDocumentUpload(!showDocumentUpload)}
@@ -2386,17 +2966,46 @@ function App() {
                               </button>
                             </div>
                             
+                            
                             {/* Document Upload Interface */}
                             {showDocumentUpload && (
                               <div className="document-upload-section">
                                 <div className="upload-header">
-                                  <h6>Upload Documents</h6>
+                                  <h6>
+                                    Upload Documents 
+                                    <span className="selected-phase-indicator">
+                                      to {getCurrentActivePhase()?.phase || 'Current Phase'}
+                                    </span>
+                                  </h6>
                                   <button 
                                     className="close-upload-btn"
-                                    onClick={() => setShowDocumentUpload(false)}
+                                    onClick={() => {
+                                      setShowDocumentUpload(false);
+                                      setActivePhaseForUpload(null);
+                                    }}
                                   >
                                     <FaTimes />
                                   </button>
+                                </div>
+                                
+                                <div className="phase-info-container">
+                                  <div className="current-phase-display">
+                                    <div className="phase-icon">
+                                      {getCurrentActivePhase()?.status === 'in-progress' && <FaClock />}
+                                      {getCurrentActivePhase()?.status === 'completed' && <FaCheckDouble />}
+                                      {getCurrentActivePhase()?.status === 'pending' && <FaCircle />}
+                                    </div>
+                                    <div className="phase-details">
+                                      <span className="phase-name">{getCurrentActivePhase()?.phase || 'No Active Phase'}</span>
+                                      <span className="phase-status">{getCurrentActivePhase()?.status || 'inactive'}</span>
+                                    </div>
+                                  </div>
+                                  <p className="phase-description">
+                                    {getCurrentActivePhase() ? 
+                                      `Documents will be uploaded to the ${getCurrentActivePhase().phase} phase.` :
+                                      'No active phase found. Please check your project timeline or contact support.'
+                                    }
+                                  </p>
                                 </div>
                                 
                                 <div className="file-input-container">
@@ -2454,17 +3063,66 @@ function App() {
                             )}
                             
                             <div className="documents-list">
-                                                              {selectedProject.timeline.find(p => p.status === 'in-progress')?.documents?.map((doc, index) => (
+                              {(selectedPhaseForView && selectedPhaseForView !== 'all' ? phaseDocuments : projectDocuments.filter(doc => doc.phase === getCurrentActivePhase()?.phase_key)).map((doc, index) => (
                                   <div 
-                                    key={doc.id || index} 
-                                    className={`document-item ${selectedDocument?.id === doc.id ? 'selected' : ''}`}
+                                    key={doc.status_id || index} 
+                                    className={`document-item ${selectedDocument?.status_id === doc.status_id ? 'selected' : ''}`}
                                     onClick={() => handleDocumentSelect(doc)}
+                                    style={{ cursor: 'pointer' }}
                                   >
                                     <div className="document-info">
-                                      <span className="document-name">{doc.name}</span>
-                                      <span className="document-status">Uploaded</span>
+                                      <span className="document-name">
+                                        {doc.activity_type}
+                                        {doc.activity_type?.includes('SIGNED') && (
+                                          <span className="signed-badge">✅ SIGNED</span>
+                                        )}
+                                      </span>
+                                    <span className="document-status">
+                                      {doc.phase ? `${doc.phase} - ` : ''}{doc.status}
+                                    </span>
+                                    {doc.status && (
+                                      <span className={`document-status-badge ${doc.status}`}>
+                                        {doc.status}
+                                      </span>
+                                    )}
                                     </div>
-                                    <span className="document-type">{doc.type.toUpperCase()}</span>
+                                  <div className="document-meta">
+                                    <span className="document-type">{(doc.activity_type || 'DOCUMENT').toUpperCase()}</span>
+                                    {doc.phase && (
+                                      <span className="document-phase">
+                                        {doc.phase === 'discovery_call' ? '🔍' : 
+                                         doc.phase === 'project_planning' ? '📋' : 
+                                         doc.phase === 'design_phase' ? '🎨' : 
+                                         doc.phase === 'closure' ? '🏁' : ''}
+                                      </span>
+                                    )}
+                                    <span className="document-date">{new Date(doc.created_at).toLocaleDateString()}</span>
+                                  </div>
+                                  <div className="document-actions">
+                                    <button 
+                                      className="download-document-btn"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (doc.location) {
+                                          window.open(doc.location, '_blank');
+                                        }
+                                      }}
+                                      title="Download document"
+                                    >
+                                      📥
+                                    </button>
+                                    <button 
+                                      className="sign-document-btn"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDocuSignPreview(doc);
+                                      }}
+                                      title="Sign document with DocuSign"
+                                      disabled={docusignLoading}
+                                    >
+                                      {docusignLoading ? '⏳' : '✍️'}
+                                    </button>
+                                  </div>
                                   </div>
                                 )) || (
                                 <div className="no-documents">
@@ -2481,27 +3139,72 @@ function App() {
                               {selectedDocument ? (
                                 <div className="document-preview">
                                   <div className="preview-header">
-                                    <h4>{selectedDocument.name}</h4>
+                                      <h4>{selectedDocument.activity_type || 'Document'}</h4>
                                     <div className="document-meta">
-                                      <span className="file-type">{selectedDocument.type.toUpperCase()}</span>
-                                      <span className="file-size">{selectedDocument.size}</span>
+                                        <span className="file-type">{(selectedDocument.phase || 'DOCUMENT').toUpperCase()}</span>
+                                        <span className="file-size">{selectedDocument.status || 'Unknown'}</span>
                                     </div>
                                   </div>
                                   <div className="preview-content">
                                     {documentPreviewUrl ? (
-                                      <iframe
-                                        src={documentPreviewUrl}
-                                        title={selectedDocument.name}
-                                        className="document-iframe"
-                                        frameBorder="0"
-                                      />
+                                      iframeLoadError ? (
+                                        <div className="no-preview">
+                                          <div className="file-icon">⚠️</div>
+                                          <p className="file-name">{selectedDocument.activity_type || 'Document'}</p>
+                                          <p className="file-info">Failed to load preview</p>
+                                          <p className="file-url">URL: {documentPreviewUrl}</p>
+                                          <button 
+                                            className="retry-preview-btn"
+                                            onClick={() => {
+                                              setIframeLoadError(false);
+                                              // Force iframe reload by updating the src
+                                              const currentUrl = documentPreviewUrl;
+                                              setDocumentPreviewUrl('');
+                                              setTimeout(() => setDocumentPreviewUrl(currentUrl), 100);
+                                            }}
+                                          >
+                                            Retry Preview
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div className="preview-container">
+                                          <iframe
+                                            src={documentPreviewUrl}
+                                            title={selectedDocument.activity_type || 'Document'}
+                                            className="document-iframe"
+                                            frameBorder="0"
+                                            onLoad={() => {
+                                              console.log('Iframe loaded successfully:', documentPreviewUrl);
+                                            }}
+                                            onError={(e) => {
+                                              console.error('Iframe failed to load:', documentPreviewUrl, e);
+                                              setIframeLoadError(true);
+                                            }}
+                                            onLoadStart={() => {
+                                              console.log('Iframe started loading:', documentPreviewUrl);
+                                            }}
+                                          />
+                                        </div>
+                                      )
                                     ) : (
-                                      <div className="no-preview">
-                                        <div className="file-icon">📄</div>
-                                        <p className="file-name">{selectedDocument.name}</p>
-                                        <p className="file-info">Preview not available</p>
-                                      </div>
-                                    )}
+                                        <div className="no-preview">
+                                          <div className="file-icon">📄</div>
+                                          <p className="file-name">{selectedDocument.activity_type || 'Document'}</p>
+                                          <p className="file-info">Preview not available</p>
+                                          <p className="file-url">Location: {selectedDocument.location || 'No location'}</p>
+                                          <p className="file-url">Status ID: {selectedDocument.status_id || 'No status ID'}</p>
+                                          <button 
+                                            className="open-external-btn"
+                                            onClick={() => {
+                                              if (selectedDocument.location) {
+                                                window.open(selectedDocument.location, '_blank');
+                                              }
+                                            }}
+                                          >
+                                            Open in New Tab
+                                          </button>
+                                        </div>
+                                      )}
                                   </div>
                                 </div>
                               ) : (
@@ -2858,87 +3561,42 @@ function App() {
 
                         <div className="user-assignment">
                           <div className="user-section">
-                            <h3 className="section-title">CSA (0)</h3>
-                            <div className="user-inputs">
-                              <div className="input-group">
-                                <label className="form-label">CSA Members</label>
-                                <input
-                                  type="text"
-                                  className="search-input"
-                                  placeholder="Search CSA members..."
-                                />
-                              </div>
-                              <div className="input-group">
-                                <label className="form-label">Other Users</label>
-                                <input
-                                  type="text"
-                                  className="search-input"
-                                  placeholder="Search other users..."
-                                />
-                              </div>
-                            </div>
-                            <div className="assigned-users">
-                              <h4 className="assigned-title">Assigned (0)</h4>
-                              <div className="empty-assigned">
-                                <span>No users assigned</span>
-                              </div>
-                            </div>
+                            <h3 className="section-title">
+                              CSA Members ({onboardingData.csaMembers.length})
+                            </h3>
+                            <UserSelector
+                              selectedUsers={onboardingData.csaMembers}
+                              onUsersChange={handleCSAMembersChange}
+                              placeholder="Search and select CSA members..."
+                              label="CSA Members"
+                              role="CSA"
+                            />
                           </div>
 
                           <div className="user-section">
-                            <h3 className="section-title">Quadrant Team (0)</h3>
-                            <div className="user-inputs">
-                              <div className="input-group">
-                                <label className="form-label">Quadrant Team Members</label>
-                                <input
-                                  type="text"
-                                  className="search-input"
-                                  placeholder="Search Quadrant Team members..."
-                                />
-                              </div>
-                              <div className="input-group">
-                                <label className="form-label">Other Users</label>
-                                <input
-                                  type="text"
-                                  className="search-input"
-                                  placeholder="Search other users..."
-                                />
-                              </div>
-                            </div>
-                            <div className="assigned-users">
-                              <h4 className="assigned-title">Assigned (0)</h4>
-                              <div className="empty-assigned">
-                                <span>No users assigned</span>
-                              </div>
-                            </div>
+                            <h3 className="section-title">
+                              Quadrant Team ({onboardingData.quadrantTeam.length})
+                            </h3>
+                            <UserSelector
+                              selectedUsers={onboardingData.quadrantTeam}
+                              onUsersChange={handleQuadrantTeamChange}
+                              placeholder="Search and select Quadrant team members..."
+                              label="Quadrant Team"
+                              role="Quadrant"
+                            />
                           </div>
 
                           <div className="user-section">
-                            <h3 className="section-title">Client (0)</h3>
-                            <div className="user-inputs">
-                              <div className="input-group">
-                                <label className="form-label">Client Members</label>
-                                <input
-                                  type="text"
-                                  className="search-input"
-                                  placeholder="Search Client members..."
-                                />
-                              </div>
-                              <div className="input-group">
-                                <label className="form-label">Other Users</label>
-                                <input
-                                  type="text"
-                                  className="search-input"
-                                  placeholder="Search other users..."
-                                />
-                              </div>
-                            </div>
-                            <div className="assigned-users">
-                              <h4 className="assigned-title">Assigned (0)</h4>
-                              <div className="empty-assigned">
-                                <span>No users assigned</span>
-                              </div>
-                            </div>
+                            <h3 className="section-title">
+                              Client Members ({onboardingData.clientMembers.length})
+                            </h3>
+                            <UserSelector
+                              selectedUsers={onboardingData.clientMembers}
+                              onUsersChange={handleClientMembersChange}
+                              placeholder="Search and select client members..."
+                              label="Client Members"
+                              role="Client"
+                            />
                           </div>
                         </div>
 
@@ -2994,7 +3652,9 @@ function App() {
                     </div>
                     <div className="stat-content">
                       <h3 className="stat-number">{projects.length}</h3>
-                      <p className="stat-label">Total Projects</p>
+                      <p className="stat-label">
+                        {user?.tag?.toLowerCase() === 'admin' ? 'All Projects' : 'Your Projects'}
+                      </p>
                     </div>
                   </div>
                   
@@ -3313,6 +3973,132 @@ function App() {
           </div>
         </div>
       </div>
+
+      {/* DocuSign Modal */}
+      {showDocuSignModal && (
+        <div className="docusign-modal-overlay">
+          <div className="docusign-modal">
+            <div className="docusign-modal-header">
+              <h3>📝 Sign Document - {documentToSign?.activity_type}</h3>
+              <button 
+                className="close-docusign-btn"
+                onClick={() => setShowDocuSignModal(false)}
+              >
+                <FaTimes />
+              </button>
+            </div>
+            
+            <div className="docusign-status">
+              <div className="status-indicator">
+                {envelopeStatus === 'sent' && <span className="status-sent">📤 Sent for Client Signature</span>}
+                {envelopeStatus === 'completed' && <span className="status-completed">✅ Document Signed</span>}
+                {envelopeStatus === 'delivered' && <span className="status-delivered">📬 Delivered to Client</span>}
+              </div>
+            </div>
+
+            <div className="docusign-iframe-container">
+              {signingUrl ? (
+                <iframe
+                  title="DocuSign Signing"
+                  src={signingUrl}
+                  width="100%"
+                  height="600px"
+                  style={{ border: '1px solid #333', borderRadius: '8px' }}
+                  onLoad={() => {
+                    console.log('DocuSign iframe loaded');
+                    // The completion will be handled by the message listener
+                    // when the iframe navigates to the /signed page
+                  }}
+                />
+              ) : (
+                <div className="docusign-loading">
+                  <div className="loading-spinner">⏳</div>
+                  <p>Preparing document for signing...</p>
+                </div>
+              )}
+            </div>
+
+            <div className="docusign-actions">
+              <button 
+                className="docusign-complete-btn"
+                onClick={handleDocuSignComplete}
+                disabled={envelopeStatus !== 'completed'}
+              >
+                ✅ Mark as Complete
+              </button>
+              <button 
+                className="docusign-cancel-btn"
+                onClick={() => setShowDocuSignModal(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Signed Documents Modal */}
+      {showSignedDocuments && (
+        <div className="modal-overlay" onClick={() => setShowSignedDocuments(false)}>
+          <div className="modal-content signed-documents-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>📄 Signed Documents</h3>
+              <button className="close-btn" onClick={() => setShowSignedDocuments(false)}>
+                <FaTimes />
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              {signedDocuments.length > 0 ? (
+                <div className="signed-documents-list">
+                  {signedDocuments.map((doc, index) => (
+                    <div key={doc.status_id || index} className="signed-document-item">
+                      <div className="document-info">
+                        <div className="document-name">{doc.activity_type}</div>
+                        <div className="document-date">
+                          Signed: {new Date(doc.updated_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div className="document-actions">
+                        <button 
+                          className="preview-btn"
+                          onClick={() => {
+                            previewSignedDocument(doc);
+                            setShowSignedDocuments(false);
+                          }}
+                        >
+                          <FaEye /> Preview
+                        </button>
+                        <button 
+                          className="download-btn"
+                          onClick={() => window.open(`http://localhost:8000${doc.preview_url}`, '_blank')}
+                        >
+                          <FaDownload /> Download
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="no-signed-documents">
+                  <FaFileContract className="no-docs-icon" />
+                  <h4>No Signed Documents</h4>
+                  <p>No documents have been signed for this project yet.</p>
+                </div>
+              )}
+            </div>
+            
+            <div className="modal-footer">
+              <button 
+                className="close-modal-btn"
+                onClick={() => setShowSignedDocuments(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
