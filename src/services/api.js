@@ -1,6 +1,34 @@
 const API_BASE_URL = 'http://localhost:8000/api';
 
 class ApiService {
+  static async get(path) {
+    try {
+      const isAbsolute = typeof path === 'string' && (path.startsWith('http://') || path.startsWith('https://'));
+      const isApiPrefixed = typeof path === 'string' && path.startsWith('/api/');
+      const url = isAbsolute
+        ? path
+        : isApiPrefixed
+          ? `http://localhost:8000${path}`
+          : `${API_BASE_URL}${path}`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || data.message || `GET ${url} failed`);
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  }
   static async login(email, password) {
     try {
       const response = await fetch(`${API_BASE_URL}/users/login/`, {
@@ -308,6 +336,169 @@ class ApiService {
       }
 
       return data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Get all registered companies for dropdown selection
+   * @returns {Promise<Object>} Response with format:
+   * {
+   *   success: boolean,
+   *   companies: Array<{
+   *     company_id: number,
+   *     company_name: string,
+   *     industry: string,
+   *     registration_date: string,
+   *     status: string
+   *   }>,
+   *   count: number
+   * }
+   */
+  static async getAllCompanies() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/companies/list/`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to get companies');
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Archive a chat session
+   * @param {number} sessionId - Session ID to archive
+   * @returns {Promise<Object>} Response with format:
+   * {
+   *   success: boolean,
+   *   message: string,
+   *   session_id: number
+   * }
+   */
+  static async archiveChatSession(sessionId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/chatbot/archive-session/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionId
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to archive chat session');
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Unarchive a chat session
+   * @param {number} sessionId - Session ID to unarchive
+   * @returns {Promise<Object>} Response with format:
+   * {
+   *   success: boolean,
+   *   message: string,
+   *   session_id: number
+   * }
+   */
+  static async unarchiveChatSession(sessionId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/chatbot/unarchive-session/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionId
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to unarchive chat session');
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Update chat session title
+   * @param {number} sessionId - Session ID to update
+   * @param {string} newTitle - New title for the chat session
+   * @returns {Promise<Object>} Response with format:
+   * {
+   *   success: boolean,
+   *   message: string,
+   *   session_id: number,
+   *   chat_title: string
+   * }
+   */
+  static async updateChatTitle(sessionId, newTitle) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/chatbot/update-chat-title/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          chat_title: newTitle
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update chat title');
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Export a chat session as PDF
+   * @param {number} sessionId - Session ID to export
+   * @returns {Promise<Blob>} PDF blob data
+   */
+  static async exportChatAsPDF(sessionId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/chatbot/export-pdf/${sessionId}/`, {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to export chat as PDF');
+      }
+
+      return response.blob();
     } catch (error) {
       throw error;
     }

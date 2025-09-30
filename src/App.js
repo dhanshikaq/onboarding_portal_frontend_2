@@ -12,6 +12,9 @@ import {
   FaChartBar, 
   FaFolderOpen, 
   FaCog,
+  FaQuestionCircle,
+  FaMoon,
+  FaSun,
   FaArrowLeft,
   FaBuilding,
   FaClock,
@@ -35,13 +38,23 @@ import {
   FaChevronRight,
   FaSync,
   FaUpload,
-  FaLock
+  FaLock,
+  FaArchive,
+  FaCheck,
+  FaUndo,
+  FaHome,
+  FaSyncAlt,
+  FaSearch,
+  FaTh,
+  FaCalendarAlt
 } from 'react-icons/fa';
 import './App.css';
 import DocumentPreviewer from './components/DocumentPreviewer';
 import ApiService from './services/api';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import UserSelector from './components/UserSelector';
+import CompanySelector from './components/CompanySelector';
+import AnalyticsDashboard from './components/AnalyticsDashboard';
 
 // Custom Quadra Logo Component
 const QuadraLogo = ({ className = "", size = 24 }) => {
@@ -70,6 +83,7 @@ function App() {
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [user, setUser] = useState(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   // Check if user is already logged in on component mount
   React.useEffect(() => {
@@ -114,7 +128,7 @@ function App() {
       
       if (event.data && event.data.type === 'REFRESH_DOCUMENT_LIST') {
         console.log('Refresh document list requested from webhook');
-        // Refresh the document list when user clicks the refresh button
+        // Automatically refresh the document list when webhook triggers update
         refreshDocumentList();
       }
     };
@@ -133,6 +147,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showPortal, setShowPortal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
+  const [showClientManagement, setShowClientManagement] = useState(false);
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
   const [showDocumentPreviewer, setShowDocumentPreviewer] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
@@ -172,10 +187,35 @@ function App() {
   const [conversationStates, setConversationStates] = useState({});
   const [sessionIds, setSessionIds] = useState({}); // Track session IDs for each chat - used to maintain conversation continuity
   const [projectIds, setProjectIds] = useState({}); // Track project IDs for each chat - used to link conversations to projects
+  const [selectedCompanies, setSelectedCompanies] = useState({}); // Track selected companies for each chat
+  
+  // Archive functionality state
+  const [showArchivePopup, setShowArchivePopup] = useState(false);
+  const [showProjectsArchivePopup, setShowProjectsArchivePopup] = useState(false);
+  const [archivedChats, setArchivedChats] = useState([]);
+  const [archivedProjects, setArchivedProjects] = useState([]);
+  const [showArchiveConfirmation, setShowArchiveConfirmation] = useState(false);
+  const [chatToArchive, setChatToArchive] = useState(null);
+  const [notification, setNotification] = useState(null);
   const [userSessions, setUserSessions] = useState([]); // Store user sessions from API
   const [isLoadingSessions, setIsLoadingSessions] = useState(false); // Loading state for sessions
   const [isLoadingProjects, setIsLoadingProjects] = useState(false); // Loading state for projects
   const [projectsError, setProjectsError] = useState(null); // Error state for projects
+  
+  // Chat title editing state
+  const [editingSessionId, setEditingSessionId] = useState(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  const [isUpdatingTitle, setIsUpdatingTitle] = useState(false);
+  
+  // Chat window title editing state
+  const [editingChatTitle, setEditingChatTitle] = useState(false);
+  const [editingChatTitleValue, setEditingChatTitleValue] = useState('');
+  const [isUpdatingChatTitle, setIsUpdatingChatTitle] = useState(false);
+  
+  // Chat file upload state
+  const [showChatFileUpload, setShowChatFileUpload] = useState(false);
+  const [chatUploadedFiles, setChatUploadedFiles] = useState([]);
+  const [isUploadingToChat, setIsUploadingToChat] = useState(false);
   
   // Document upload state
   const [showDocumentUpload, setShowDocumentUpload] = useState(false);
@@ -244,6 +284,31 @@ function App() {
     };
   }, [showChatOptions]);
 
+  // Load archived chats when archive popup opens
+  React.useEffect(() => {
+    if (showArchivePopup && user) {
+      loadArchivedChats();
+    }
+  }, [showArchivePopup, user]);
+
+  // Load archived projects from localStorage on component mount
+  React.useEffect(() => {
+    const savedArchivedProjects = localStorage.getItem('archivedProjects');
+    if (savedArchivedProjects) {
+      try {
+        setArchivedProjects(JSON.parse(savedArchivedProjects));
+      } catch (error) {
+        console.error('Error loading archived projects:', error);
+        localStorage.removeItem('archivedProjects');
+      }
+    }
+  }, []);
+
+  // Save archived projects to localStorage whenever it changes
+  React.useEffect(() => {
+    localStorage.setItem('archivedProjects', JSON.stringify(archivedProjects));
+  }, [archivedProjects]);
+
   // Auto-resize textarea when inputMessage changes
   React.useEffect(() => {
     const textarea = document.querySelector('.chat-input');
@@ -253,12 +318,17 @@ function App() {
     }
   }, [inputMessage]);
 
-  // Close document upload when clicking outside
+  // Close document upload and chat file upload when clicking outside
   React.useEffect(() => {
     const handleClickOutside = (event) => {
       if (showDocumentUpload && !event.target.closest('.document-upload-section') && !event.target.closest('.add-document-btn')) {
         setShowDocumentUpload(false);
         setUploadedFiles([]);
+      }
+      
+      if (showChatFileUpload && !event.target.closest('.chat-file-upload-modal') && !event.target.closest('.plus-button')) {
+        setShowChatFileUpload(false);
+        setChatUploadedFiles([]);
       }
     };
 
@@ -266,7 +336,7 @@ function App() {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showDocumentUpload]);
+  }, [showDocumentUpload, showChatFileUpload]);
 
   // Cleanup preview URLs when component unmounts or document changes
   React.useEffect(() => {
@@ -307,6 +377,67 @@ function App() {
     if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
     return `${Math.floor(diffInMinutes / 1440)}d ago`;
+  };
+
+  // Archive functionality functions
+  const showNotification = (message, type = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  const loadArchivedChats = async () => {
+    if (!user) return;
+    
+    try {
+      setIsLoadingSessions(true);
+      const response = await ApiService.getUserSessions(user.user_id, { limit: 50 });
+      
+      if (response.success) {
+        // Filter for archived sessions (assuming backend will support this)
+        const archived = response.sessions.filter(session => session.is_archived);
+        setArchivedChats(archived);
+      }
+    } catch (error) {
+      console.error('Error loading archived chats:', error);
+      showNotification('Failed to load archived chats', 'error');
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  };
+
+  const handleArchiveChat = (chatId) => {
+    const chat = chats.find(c => c.id === chatId);
+    if (!chat) return;
+    
+    setChatToArchive(chat);
+    setShowArchiveConfirmation(true);
+  };
+
+
+  const handleUnarchiveChat = async (archivedChat) => {
+    try {
+      if (archivedChat.session_id) {
+        await ApiService.unarchiveChatSession(archivedChat.session_id);
+      }
+      
+      // Remove from archived chats
+      setArchivedChats(prev => prev.filter(chat => chat.id !== archivedChat.id));
+      
+      // Add back to active chats
+      setChats(prevChats => [...prevChats, {
+        ...archivedChat,
+        isActive: false
+      }]);
+      
+      showNotification('Chat unarchived successfully!', 'success');
+      
+      // Reload archived chats
+      loadArchivedChats();
+      
+    } catch (error) {
+      console.error('Error unarchiving chat:', error);
+      showNotification('Failed to unarchive chat', 'error');
+    }
   };
 
   // Helper function to parse conversation context into messages
@@ -373,6 +504,31 @@ function App() {
 
   // Projects data - loaded from API
   const [projects, setProjects] = useState([]);
+  const [isGroupedView, setIsGroupedView] = useState(false);
+
+  // Group projects by company and domain
+  const getGroupedProjects = () => {
+    if (!isGroupedView) return null;
+    
+    const grouped = {};
+    
+    projects.forEach(project => {
+      const company = project.company || 'Unknown Company';
+      const domain = project.domain || 'General';
+      
+      if (!grouped[company]) {
+        grouped[company] = {};
+      }
+      
+      if (!grouped[company][domain]) {
+        grouped[company][domain] = [];
+      }
+      
+      grouped[company][domain].push(project);
+    });
+    
+    return grouped;
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -614,6 +770,130 @@ function App() {
     }
   };
 
+  // Company selection handler
+  const handleCompanySelection = (company) => {
+    if (company) {
+      // Update the selected company for the current chat
+      setSelectedCompanies(prev => ({
+        ...prev,
+        [currentChatId]: company
+      }));
+
+      // Add a user message indicating the company selection
+      const companySelectionMessage = {
+        id: currentChat.messages.length + 1,
+        text: `Selected company: ${company.company_name}`,
+        isBot: false,
+        timestamp: new Date(),
+        isCompanySelection: true
+      };
+
+      // Update the chat with the company selection message
+      setChats(prevChats => {
+        return prevChats.map(chat => {
+          if (chat.id === currentChatId) {
+            return {
+              ...chat,
+              messages: [...chat.messages, companySelectionMessage]
+            };
+          }
+          return chat;
+        });
+      });
+
+      // Send the company selection to the chatbot
+      handleCompanySelectionMessage(company);
+    } else {
+      // Remove the selected company
+      setSelectedCompanies(prev => {
+        const newState = { ...prev };
+        delete newState[currentChatId];
+        return newState;
+      });
+    }
+  };
+
+  // Handle sending company selection to chatbot
+  const handleCompanySelectionMessage = async (company) => {
+    if (!user) return;
+
+    const companyMessage = `I have selected the company: ${company.company_name}${company.industry ? ` (${company.industry})` : ''}. Please proceed with the next steps.`;
+
+    try {
+      // Get current conversation state for this chat
+      const currentConversationState = conversationStates[currentChatId] || {};
+      const currentSessionId = sessionIds[currentChatId];
+      const currentProjectId = projectIds[currentChatId];
+
+      // Call the chatbot API with the company selection
+      const response = await ApiService.sendChatMessage(
+        user.user_id,
+        user.tag || 'client',
+        companyMessage,
+        currentConversationState,
+        currentSessionId,
+        currentProjectId
+      );
+
+      // Update conversation state
+      setConversationStates(prev => ({
+        ...prev,
+        [currentChatId]: response.conversation_state || {}
+      }));
+
+      // Store session_id if provided in response
+      if (response.session_id) {
+        setSessionIds(prev => ({
+          ...prev,
+          [currentChatId]: response.session_id
+        }));
+      }
+
+      // Add bot response to chat
+      const botMessage = {
+        id: currentChat.messages.length + 2,
+        text: response.response,
+        isBot: true,
+        timestamp: new Date()
+      };
+
+      setChats(prevChats => {
+        return prevChats.map(chat => {
+          if (chat.id === currentChatId) {
+            return {
+              ...chat,
+              messages: [...chat.messages, botMessage]
+            };
+          }
+          return chat;
+        });
+      });
+
+    } catch (error) {
+      console.error('Failed to send company selection:', error);
+      
+      // Add error message to chat
+      const errorMessage = {
+        id: currentChat.messages.length + 2,
+        text: "I'm sorry, there was an error processing your company selection. Please try again.",
+        isBot: true,
+        timestamp: new Date()
+      };
+
+      setChats(prevChats => {
+        return prevChats.map(chat => {
+          if (chat.id === currentChatId) {
+            return {
+              ...chat,
+              messages: [...chat.messages, errorMessage]
+            };
+          }
+          return chat;
+        });
+      });
+    }
+  };
+
   // Chat management functions
   const createNewChat = () => {
     const newChatId = Math.max(...chats.map(chat => chat.id)) + 1;
@@ -635,6 +915,12 @@ function App() {
     setConversationStates(prev => ({
       ...prev,
       [newChatId]: {}
+    }));
+
+    // Initialize company selection state for new chat
+    setSelectedCompanies(prev => ({
+      ...prev,
+      [newChatId]: null
     }));
     
     // Initialize session_id as null for new chat
@@ -817,7 +1103,15 @@ function App() {
         };
         });
         
-        setProjects(transformedProjects);
+        // Merge API projects with any restored projects from archive
+        setProjects(prevProjects => {
+          // Get restored projects (projects that exist in prevProjects but not in API response)
+          const apiProjectIds = transformedProjects.map(p => p.id);
+          const restoredProjects = prevProjects.filter(p => !apiProjectIds.includes(p.id));
+          
+          // Combine API projects with restored projects
+          return [...transformedProjects, ...restoredProjects];
+        });
         
         // Automatically select the first project if none is selected
         if (transformedProjects.length > 0 && !selectedProject) {
@@ -1036,7 +1330,7 @@ function App() {
     
     const updatedChats = chats.filter(chat => chat.id !== chatId);
     
-    // Clean up session_id, project_id and conversation state for deleted chat
+    // Clean up session_id, project_id, conversation state and company selection for deleted chat
     setSessionIds(prev => {
       const newSessionIds = { ...prev };
       delete newSessionIds[chatId];
@@ -1047,6 +1341,12 @@ function App() {
       const newProjectIds = { ...prev };
       delete newProjectIds[chatId];
       return newProjectIds;
+    });
+
+    setSelectedCompanies(prev => {
+      const newSelectedCompanies = { ...prev };
+      delete newSelectedCompanies[chatId];
+      return newSelectedCompanies;
     });
     
     setConversationStates(prev => {
@@ -1062,6 +1362,204 @@ function App() {
     }
     
     setChats(updatedChats);
+  };
+
+  // Chat title editing functions
+  const handleSessionTitleDoubleClick = (session, e) => {
+    e.stopPropagation(); // Prevent session click
+    setEditingSessionId(session.session_id);
+    setEditingTitle(session.project_name || `Session ${session.session_id}`);
+  };
+
+  const handleTitleEditChange = (e) => {
+    setEditingTitle(e.target.value);
+  };
+
+  const handleTitleEditKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleSaveTitle();
+    } else if (e.key === 'Escape') {
+      handleCancelTitleEdit();
+    }
+  };
+
+  const handleSaveTitle = async () => {
+    if (!editingSessionId || !editingTitle.trim()) {
+      handleCancelTitleEdit();
+      return;
+    }
+
+    setIsUpdatingTitle(true);
+    try {
+      console.log('Session title update - editingSessionId:', editingSessionId, 'type:', typeof editingSessionId);
+      // Check if this is a local session (starts with "local_") or a real database session
+      if (typeof editingSessionId === 'string' && editingSessionId.startsWith('local_')) {
+        // For local sessions, just update the local state
+        setUserSessions(prev => 
+          prev.map(session => 
+            session.session_id === editingSessionId 
+              ? { ...session, project_name: editingTitle.trim() }
+              : session
+          )
+        );
+        
+        // Also update the chat name if this session is currently active
+        const currentChatIdForSession = Object.keys(sessionIds).find(chatId => 
+          sessionIds[chatId] === editingSessionId
+        );
+        
+        if (currentChatIdForSession) {
+          setChats(prev => 
+            prev.map(chat => 
+              chat.id === parseInt(currentChatIdForSession)
+                ? { ...chat, name: editingTitle.trim() }
+                : chat
+            )
+          );
+        }
+        
+        showNotification('Chat title updated successfully', 'success');
+      } else if (typeof editingSessionId === 'number') {
+        // For database sessions, update via API
+        const response = await ApiService.updateChatTitle(editingSessionId, editingTitle.trim());
+        
+        if (response.success) {
+          // Update the session in userSessions
+          setUserSessions(prev => 
+            prev.map(session => 
+              session.session_id === editingSessionId 
+                ? { ...session, project_name: editingTitle.trim() }
+                : session
+            )
+          );
+          
+          // Also update the chat name if this session is currently active
+          const currentChatIdForSession = Object.keys(sessionIds).find(chatId => 
+            sessionIds[chatId] === editingSessionId
+          );
+          
+          if (currentChatIdForSession) {
+            setChats(prev => 
+              prev.map(chat => 
+                chat.id === parseInt(currentChatIdForSession)
+                  ? { ...chat, name: editingTitle.trim() }
+                  : chat
+              )
+            );
+          }
+          
+          showNotification('Chat title updated successfully', 'success');
+        }
+      } else {
+        throw new Error('Invalid session ID format');
+      }
+    } catch (error) {
+      console.error('Error updating chat title:', error);
+      showNotification('Failed to update chat title', 'error');
+    } finally {
+      setIsUpdatingTitle(false);
+      handleCancelTitleEdit();
+    }
+  };
+
+  const handleCancelTitleEdit = () => {
+    setEditingSessionId(null);
+    setEditingTitle('');
+  };
+
+  // Chat window title editing functions
+  const handleChatTitleDoubleClick = (e) => {
+    e.stopPropagation();
+    if (currentChat) {
+      setEditingChatTitle(true);
+      setEditingChatTitleValue(currentChat.name);
+    }
+  };
+
+  const handleChatTitleEditChange = (e) => {
+    setEditingChatTitleValue(e.target.value);
+  };
+
+  const handleChatTitleEditKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleSaveChatTitle();
+    } else if (e.key === 'Escape') {
+      handleCancelChatTitleEdit();
+    }
+  };
+
+  const handleSaveChatTitle = async () => {
+    if (!currentChat || !editingChatTitleValue.trim()) {
+      handleCancelChatTitleEdit();
+      return;
+    }
+
+    setIsUpdatingChatTitle(true);
+    try {
+      // Update the chat name locally first
+      setChats(prev => 
+        prev.map(chat => 
+          chat.id === currentChat.id
+            ? { ...chat, name: editingChatTitleValue.trim() }
+            : chat
+        )
+      );
+
+      // Also update the local session in userSessions
+      setUserSessions(prev => 
+        prev.map(session => 
+          session.session_id === `local_${currentChat.id}` 
+            ? { ...session, project_name: editingChatTitleValue.trim() }
+            : session
+        )
+      );
+
+      // If this chat has an associated session ID, update it in the database too
+      const sessionId = sessionIds[currentChat.id];
+      console.log('Chat title update - sessionId:', sessionId, 'type:', typeof sessionId);
+      if (sessionId && typeof sessionId === 'number') {
+        try {
+          console.log('Updating chat title in database for session:', sessionId);
+          const response = await ApiService.updateChatTitle(sessionId, editingChatTitleValue.trim());
+          
+          if (response.success) {
+            // Update the database session in userSessions as well
+            setUserSessions(prev => 
+              prev.map(session => 
+                session.session_id === sessionId 
+                  ? { ...session, project_name: editingChatTitleValue.trim() }
+                  : session
+              )
+            );
+          }
+        } catch (dbError) {
+          console.error('Error updating chat title in database:', dbError);
+          // Don't revert local changes for database errors - the title was updated locally
+        }
+      }
+      
+      showNotification('Chat title updated successfully', 'success');
+    } catch (error) {
+      console.error('Error updating chat title:', error);
+      showNotification('Failed to update chat title', 'error');
+      
+      // Revert the local change on error
+      setChats(prev => 
+        prev.map(chat => 
+          chat.id === currentChat.id
+            ? { ...chat, name: currentChat.name }
+            : chat
+        )
+      );
+    } finally {
+      setIsUpdatingChatTitle(false);
+      handleCancelChatTitleEdit();
+    }
+  };
+
+  const handleCancelChatTitleEdit = () => {
+    setEditingChatTitle(false);
+    setEditingChatTitleValue('');
   };
 
   const handleSendMessage = async (e) => {
@@ -1416,6 +1914,104 @@ function App() {
       deleteChat(currentChat.id);
       setShowChatOptions(false);
     }
+  };
+
+  const archiveCurrentChat = () => {
+    if (currentChat) {
+      setChatToArchive(currentChat);
+      setShowArchiveConfirmation(true);
+      setShowChatOptions(false); // Close the options menu
+    }
+  };
+
+  const confirmArchiveChat = async () => {
+    if (!chatToArchive) return;
+    
+    try {
+      // Get the actual backend session ID, not the local chat ID
+      const sessionId = sessionIds[chatToArchive.id];
+      
+      if (!sessionId) {
+        showNotification('This chat does not have a valid session ID and cannot be archived.', 'error');
+        setShowArchiveConfirmation(false);
+        return;
+      }
+      
+      await ApiService.archiveChatSession(sessionId);
+      
+      // Show success message using the notification system
+      showNotification(`Chat "${chatToArchive.name}" has been archived successfully.`, 'success');
+      
+      // Refresh the chat list to reflect the archived status
+      await loadUserSessions();
+      
+      // Close the confirmation modal
+      setShowArchiveConfirmation(false);
+      setChatToArchive(null);
+      
+    } catch (error) {
+      console.error('Error archiving chat:', error);
+      showNotification(`Failed to archive chat: ${error.message}`, 'error');
+      setShowArchiveConfirmation(false);
+      setChatToArchive(null);
+    }
+  };
+
+  // Projects Archive Handler Functions
+  const handleRestoreProject = async (projectId) => {
+    try {
+      // Remove from archived projects
+      const projectToRestore = archivedProjects.find(p => p.id === projectId);
+      if (projectToRestore) {
+        setArchivedProjects(prev => prev.filter(p => p.id !== projectId));
+        
+        // Add back to active projects
+        setProjects(prev => [projectToRestore, ...prev]);
+        
+        showNotification('Project restored successfully', 'success');
+      }
+    } catch (error) {
+      console.error('Error restoring project:', error);
+      showNotification('Failed to restore project', 'error');
+    }
+  };
+
+  const handleDeleteProject = async (projectId) => {
+    if (window.confirm('Are you sure you want to permanently delete this project? This action cannot be undone.')) {
+      try {
+        // Remove from archived projects
+        setArchivedProjects(prev => prev.filter(p => p.id !== projectId));
+        
+        showNotification('Project deleted permanently', 'success');
+      } catch (error) {
+        console.error('Error deleting project:', error);
+        showNotification('Failed to delete project', 'error');
+      }
+    }
+  };
+
+  const handleArchiveProject = (projectId) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+    
+    // Add archived date
+    const archivedProject = {
+      ...project,
+      archivedDate: new Date().toISOString()
+    };
+    
+    // Move to archived projects
+    setArchivedProjects(prev => [archivedProject, ...prev]);
+    
+    // Remove from active projects
+    setProjects(prev => prev.filter(p => p.id !== projectId));
+    
+    showNotification('Project archived successfully', 'success');
+  };
+
+  const cancelArchiveChat = () => {
+    setShowArchiveConfirmation(false);
+    setChatToArchive(null);
   };
 
   // Helper function to convert document URLs to clickable links
@@ -1891,6 +2487,60 @@ function App() {
 
   const removeUploadedFile = (index) => {
     setUploadedFiles(uploadedFiles.filter((_, i) => i !== index));
+  };
+
+  // Chat file upload functions
+  const handleChatFileSelect = (event) => {
+    const files = Array.from(event.target.files);
+    setChatUploadedFiles(prev => [...prev, ...files]);
+  };
+
+  const removeChatUploadedFile = (index) => {
+    setChatUploadedFiles(chatUploadedFiles.filter((_, i) => i !== index));
+  };
+
+  const handleChatFileUpload = async () => {
+    if (chatUploadedFiles.length === 0 || !currentChat) return;
+    
+    setIsUploadingToChat(true);
+    
+    try {
+      // Create file messages for each uploaded file
+      const fileMessages = chatUploadedFiles.map((file, index) => ({
+        id: currentChat.messages.length + index + 1,
+        text: `📎 Attached file: ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} MB)`,
+        isBot: false,
+        timestamp: new Date(),
+        file: file,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
+      }));
+
+      // Add file messages to current chat
+      setChats(prevChats => {
+        return prevChats.map(chat => {
+          if (chat.id === currentChatId) {
+            return {
+              ...chat,
+              messages: [...chat.messages, ...fileMessages],
+              preview: `Attached ${chatUploadedFiles.length} file(s)`
+            };
+          }
+          return chat;
+        });
+      });
+      
+      // Clear uploaded files
+      setChatUploadedFiles([]);
+      setShowChatFileUpload(false);
+      
+    } catch (error) {
+      console.error('Chat file upload error:', error);
+      alert('Failed to upload files. Please try again.');
+    } finally {
+      setIsUploadingToChat(false);
+    }
   };
 
   const loadProjectDocuments = async (projectId) => {
@@ -2434,10 +3084,55 @@ function App() {
                     <div 
                       key={session.session_id} 
                       className="session-item"
-                      onClick={() => handleSessionClick(session)}
+                      onClick={() => !editingSessionId && handleSessionClick(session)}
                     >
                       <div className="session-header">
-                        <span className="session-project">{session.project_name}</span>
+                        {editingSessionId === session.session_id ? (
+                          <div className="session-title-edit">
+                            <input
+                              type="text"
+                              value={editingTitle}
+                              onChange={handleTitleEditChange}
+                              onKeyDown={handleTitleEditKeyDown}
+                              onBlur={handleSaveTitle}
+                              className="session-title-input"
+                              disabled={isUpdatingTitle}
+                              autoFocus
+                            />
+                            <div className="session-title-actions">
+                              <button
+                                className="session-title-save"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSaveTitle();
+                                }}
+                                disabled={isUpdatingTitle}
+                                title="Save"
+                              >
+                                <FaCheck />
+                              </button>
+                              <button
+                                className="session-title-cancel"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCancelTitleEdit();
+                                }}
+                                disabled={isUpdatingTitle}
+                                title="Cancel"
+                              >
+                                <FaTimes />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <span 
+                            className="session-project"
+                            onDoubleClick={(e) => handleSessionTitleDoubleClick(session, e)}
+                            title="Double-click to edit"
+                          >
+                            {session.project_name}
+                          </span>
+                        )}
                         <span className={`session-status ${session.is_active ? 'active' : 'inactive'}`}>
                           {session.is_active ? 'Active' : 'Inactive'}
                         </span>
@@ -2500,7 +3195,52 @@ function App() {
               <div className="chat-partner">
                 <div className="partner-avatar">{currentChat ? currentChat.avatar : 'A'}</div>
                 <div className="partner-info">
-                  <div className="partner-name">{currentChat ? currentChat.name : 'Select a chat'}</div>
+                  {editingChatTitle ? (
+                    <div className="chat-title-edit">
+                      <input
+                        type="text"
+                        value={editingChatTitleValue}
+                        onChange={handleChatTitleEditChange}
+                        onKeyDown={handleChatTitleEditKeyDown}
+                        onBlur={handleSaveChatTitle}
+                        className="chat-title-input"
+                        disabled={isUpdatingChatTitle}
+                        autoFocus
+                      />
+                      <div className="chat-title-actions">
+                        <button
+                          className="chat-title-save"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSaveChatTitle();
+                          }}
+                          disabled={isUpdatingChatTitle}
+                          title="Save"
+                        >
+                          <FaCheck />
+                        </button>
+                        <button
+                          className="chat-title-cancel"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCancelChatTitleEdit();
+                          }}
+                          disabled={isUpdatingChatTitle}
+                          title="Cancel"
+                        >
+                          <FaTimes />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div 
+                      className="partner-name"
+                      onDoubleClick={handleChatTitleDoubleClick}
+                      title="Double-click to edit"
+                    >
+                      {currentChat ? currentChat.name : 'Select a chat'}
+                    </div>
+                  )}
                   <div className="partner-status">{currentChat ? currentChat.preview : 'No chat selected'}</div>
                 </div>
               </div>
@@ -2519,6 +3259,10 @@ function App() {
                       <div className="dropdown-item" onClick={saveChatAsPDF}>
                         <FaFileAlt />
                         <span>Save this chat as PDF</span>
+                      </div>
+                      <div className="dropdown-item archive-option" onClick={archiveCurrentChat}>
+                        <FaArchive />
+                        <span>Archive chat</span>
                       </div>
                       <div className="dropdown-item delete-option" onClick={deleteCurrentChat}>
                         <FaTrash />
@@ -2573,7 +3317,28 @@ function App() {
                       ) : (
                         <div className={`message-text ${message.isProcessing ? 'processing' : ''}`}>
                           {message.isBot ? (
-                            <MarkdownWithLinks text={message.text} />
+                            <>
+                              <MarkdownWithLinks text={message.text} />
+                              {/* Show company selector if the message indicates company selection is needed */}
+                              {message.text && (
+                                message.text.toLowerCase().includes('company') && 
+                                (message.text.toLowerCase().includes('select') || 
+                                 message.text.toLowerCase().includes('choose') ||
+                                 message.text.toLowerCase().includes('registered')) &&
+                                !selectedCompanies[currentChatId] && (
+                                  <div className="company-selection-container">
+                                    <CompanySelector
+                                      selectedCompany={selectedCompanies[currentChatId]}
+                                      onCompanyChange={handleCompanySelection}
+                                      placeholder="Select a registered company..."
+                                      label=""
+                                      showLabel={false}
+                                      compact={true}
+                                    />
+                                  </div>
+                                )
+                              )}
+                            </>
                           ) : (
                             message.text
                           )}
@@ -2597,7 +3362,13 @@ function App() {
           <div className="chat-input-container">
             <form onSubmit={handleSendMessage} className="chat-input-form">
               <div className="input-actions">
-                <button type="button" className="action-button plus-button"><FaPlus /></button>
+                <button 
+                  type="button" 
+                  className="action-button plus-button"
+                  onClick={() => setShowChatFileUpload(!showChatFileUpload)}
+                >
+                  <FaPlus />
+                </button>
               </div>
               <textarea
                 value={inputMessage}
@@ -2625,6 +3396,80 @@ function App() {
               </div>
             </form>
           </div>
+          
+          {/* Chat File Upload UI */}
+          {showChatFileUpload && (
+            <div className="chat-file-upload-overlay">
+              <div className="chat-file-upload-modal">
+                <div className="upload-header">
+                  <h6>Attach Files to Chat</h6>
+                  <button 
+                    className="close-upload-btn"
+                    onClick={() => {
+                      setShowChatFileUpload(false);
+                      setChatUploadedFiles([]);
+                    }}
+                  >
+                    <FaTimes />
+                  </button>
+                </div>
+                
+                <div className="upload-content">
+                  <div className="file-input-section">
+                    <input
+                      type="file"
+                      multiple
+                      onChange={handleChatFileSelect}
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.png,.jpg,.jpeg,.gif,.mp4,.mp3,.zip,.rar"
+                      className="file-input"
+                      id="chat-file-upload"
+                    />
+                    <label htmlFor="chat-file-upload" className="file-input-label">
+                      <FaPaperclip />
+                      <span>Choose Files</span>
+                    </label>
+                  </div>
+                  
+                  {chatUploadedFiles.length > 0 && (
+                    <div className="uploaded-files">
+                      <h6>Selected Files:</h6>
+                      {chatUploadedFiles.map((file, index) => (
+                        <div key={index} className="uploaded-file-item">
+                          <span className="file-name">{file.name}</span>
+                          <span className="file-size">({(file.size / (1024 * 1024)).toFixed(1)} MB)</span>
+                          <button
+                            className="remove-file-btn"
+                            onClick={() => removeChatUploadedFile(index)}
+                          >
+                            <FaTimes />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  <div className="upload-actions">
+                    <button 
+                      className="upload-btn"
+                      onClick={handleChatFileUpload}
+                      disabled={chatUploadedFiles.length === 0 || isUploadingToChat}
+                    >
+                      {isUploadingToChat ? 'Uploading...' : 'Attach Files'}
+                    </button>
+                    <button 
+                      className="cancel-upload-btn"
+                      onClick={() => {
+                        setShowChatFileUpload(false);
+                        setChatUploadedFiles([]);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         
 
@@ -2652,17 +3497,21 @@ function App() {
                   <span className="action-icon"><FaSignOutAlt /></span>
                   <span className="action-text">Take me to portal</span>
                 </div>
-                <div className="quick-action-item">
-                  <span className="action-icon"><FaClipboardList /></span>
-                  <span className="action-text">Current projects</span>
-                </div>
-                <div className="quick-action-item">
+                <div className="quick-action-item" onClick={() => setShowProjectsArchivePopup(true)}>
                   <span className="action-icon"><FaFolder /></span>
                   <span className="action-text">Projects archive</span>
+                </div>
+                <div className="quick-action-item" onClick={() => setShowArchivePopup(true)}>
+                  <span className="action-icon"><FaArchive /></span>
+                  <span className="action-text">Archive chats</span>
                 </div>
                 <div className="quick-action-item" onClick={() => setShowDashboard(true)}>
                   <span className="action-icon"><FaChartBar /></span>
                   <span className="action-text">Dashboard</span>
+                </div>
+                <div className="quick-action-item" onClick={() => setShowClientManagement(true)}>
+                  <span className="action-icon"><FaUsers /></span>
+                  <span className="action-text">Client Management</span>
                 </div>
               </div>
             </div>
@@ -2712,11 +3561,55 @@ function App() {
                   </div>
                 </div>
                 <div className="portal-user-info">
+                  <div className="portal-actions">
+                    <button className="pill-btn" onClick={() => setShowDashboard(true)}>
+                      <FaSignOutAlt />
+                      <span>Go to dashboard</span>
+                    </button>
+                    <button className="pill-btn outline" onClick={() => setShowProjectsArchivePopup(true)}>
+                      <FaArchive />
+                      <span>Projects archive</span>
+                    </button>
+                  </div>
                   <div className="user-details">
                     <span className="user-greeting">Hi! {userName}</span>
                     <span className="user-role">{user ? user.tag : 'User'}</span>
                   </div>
-                  <div className="user-avatar">{userInitial}</div>
+                  <div className="user-avatar clickable" onClick={() => setShowUserMenu(v => !v)}>{userInitial}</div>
+                  {showUserMenu && (
+                    <div className="user-dropdown" onMouseLeave={() => setShowUserMenu(false)}>
+                      <div className="user-dropdown-header">
+                        <div className="avatar-mini">{userInitial}</div>
+                        <div className="user-meta">
+                          <div className="meta-name">{userName}</div>
+                          <div className="meta-email">{user?.email || 'user@company.com'}</div>
+                        </div>
+                        <span className="meta-badge">PRO</span>
+                      </div>
+                      <div className="user-dropdown-divider" />
+                      <button className="user-dropdown-item" onClick={() => setShowSettings(true)}>
+                        <FaCog />
+                        <span>Profile Settings</span>
+                      </button>
+                      <button className="user-dropdown-item">
+                        <FaQuestionCircle />
+                        <span>Help Center</span>
+                      </button>
+                      <button className="user-dropdown-item">
+                        <FaMoon />
+                        <span>Dark Mode</span>
+                      </button>
+                      <button className="user-dropdown-item">
+                        <FaSun />
+                        <span>Light Mode</span>
+                      </button>
+                      <div className="user-dropdown-divider" />
+                      <button className="user-dropdown-item" onClick={handleLogout}>
+                        <FaSignOutAlt />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -2725,23 +3618,32 @@ function App() {
                   {/* Left Pane - Projects */}
                 <div className="projects-pane">
                   <div className="pane-header">
-                    <h2 className="pane-title">Projects</h2>
-                    <div className="pane-actions">
+                    <div className="pane-title-row">
+                      <h2 className="pane-title">Projects</h2>
                       <button 
-                        className="refresh-projects-btn"
-                        onClick={loadUserProjects}
-                        disabled={isLoadingProjects}
-                        title="Refresh projects"
-                      >
-                        <FaSync className={isLoadingProjects ? 'spinning' : ''} />
-                      </button>
-                      <button 
-                        className="new-project-btn"
+                        className="new-project-btn compact"
                         onClick={() => setShowNewProjectForm(true)}
                       >
                         <FaPlusCircle />
                         <span>Client Onboarding</span>
                       </button>
+                    </div>
+                    <div className="pane-controls-row">
+                      <div className={`view-toggle ${isGroupedView ? 'is-grouped' : 'is-list'}`}>
+                        <div className="toggle-thumb" />
+                        <button 
+                          className={`toggle-btn ${!isGroupedView ? 'active' : ''}`}
+                          onClick={() => setIsGroupedView(false)}
+                        >
+                          List
+                        </button>
+                        <button 
+                          className={`toggle-btn ${isGroupedView ? 'active' : ''}`}
+                          onClick={() => setIsGroupedView(true)}
+                        >
+                          Grouped
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div className="project-list">
@@ -2762,21 +3664,118 @@ function App() {
                         </button>
                       </div>
                     ) : projects.length > 0 ? (
-                      projects.map((project) => (
-                        <div 
-                          key={project.id}
-                          className={`project-item ${selectedProject?.id === project.id ? 'selected' : ''}`}
-                          onClick={() => handleProjectSelect(project)}
-                        >
-                          <div className="project-header">
-                            <h3 className="project-title">{project.title}</h3>
-                            <span className={`project-status ${getProjectStatus(project).toLowerCase().replace(' ', '-')}`}>
-                              {getProjectStatus(project)}
-                            </span>
-                          </div>
-                          <p className="project-description">{project.description}</p>
+                      isGroupedView ? (
+                        <div className="grouped-projects">
+                          {Object.entries(getGroupedProjects()).map(([company, domains]) => (
+                            <div key={company} className="company-group">
+                              <div className="group-header company-header">
+                                <FaBuilding className="group-icon" />
+                                <h3 className="group-title">{company}</h3>
+                                <span className="group-count">
+                                  {Object.values(domains).flat().length} project{Object.values(domains).flat().length !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+                              {Object.entries(domains).map(([domain, domainProjects]) => (
+                                <div key={`${company}-${domain}`} className="domain-group">
+                                  <div className="group-header domain-header">
+                                    <FaProjectDiagram className="group-icon" />
+                                    <h4 className="group-title">{domain}</h4>
+                                    <span className="group-count">
+                                      {domainProjects.length} project{domainProjects.length !== 1 ? 's' : ''}
+                                    </span>
+                                  </div>
+                                  <div className="group-projects">
+                                    {domainProjects.map((project) => (
+                                      <div 
+                                        key={project.id}
+                                        className={`project-item ${selectedProject?.id === project.id ? 'selected' : ''}`}
+                                        onClick={() => handleProjectSelect(project)}
+                                      >
+                                        <div className="project-header">
+                                          <h3 className="project-title">{project.title}</h3>
+                                          <div className="project-header-actions">
+                                            <span className={`project-status ${getProjectStatus(project).toLowerCase().replace(' ', '-')}`}>
+                                              {getProjectStatus(project)}
+                                            </span>
+                                            <button 
+                                              className="project-archive-btn"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleArchiveProject(project.id);
+                                              }}
+                                              title="Archive Project"
+                                            >
+                                              <FaArchive />
+                                            </button>
+                                          </div>
+                                        </div>
+                                        <p className="project-description">{project.description}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
                         </div>
-                      ))
+                      ) : (
+                        projects.map((project) => (
+                          <div 
+                            key={project.id}
+                            className={`project-item ${selectedProject?.id === project.id ? 'selected' : ''}`}
+                            onClick={() => handleProjectSelect(project)}
+                          >
+                            <div className="project-header">
+                              <h3 className="project-title">{project.title}</h3>
+                              <div className="project-header-actions">
+                                <span className={`project-status ${getProjectStatus(project).toLowerCase().replace(' ', '-')}`}>
+                                  {getProjectStatus(project)}
+                                </span>
+                                <button 
+                                  className="project-delete-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (window.confirm('Delete this project? This cannot be undone.')) {
+                                      setProjects(prev => prev.filter(p => p.id !== project.id));
+                                      // If it was also in archived list, remove there too
+                                      setArchivedProjects(prev => prev.filter(p => p.id !== project.id));
+                                      showNotification('Project deleted', 'success');
+                                    }
+                                  }}
+                                  title="Delete Project"
+                                >
+                                  <FaTrash />
+                                </button>
+                                <button 
+                                  className="project-delete-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (window.confirm('Delete this project? This cannot be undone.')) {
+                                      setProjects(prev => prev.filter(p => p.id !== project.id));
+                                      setArchivedProjects(prev => prev.filter(p => p.id !== project.id));
+                                      showNotification('Project deleted', 'success');
+                                    }
+                                  }}
+                                  title="Delete Project"
+                                >
+                                  <FaTrash />
+                                </button>
+                                <button 
+                                  className="project-archive-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleArchiveProject(project.id);
+                                  }}
+                                  title="Archive Project"
+                                >
+                                  <FaArchive />
+                                </button>
+                              </div>
+                            </div>
+                            <p className="project-description">{project.description}</p>
+                          </div>
+                        ))
+                      )
                     ) : (
                       <div className="no-projects">
                         <p>No projects found</p>
@@ -2797,19 +3796,14 @@ function App() {
                   {selectedProject ? (
                     <div className="project-details-content">
                       <div className="project-header">
-                        <h3 className="project-title">{selectedProject.title}</h3>
-                        <p className="project-description">{selectedProject.description}</p>
+                        <div className="project-title-section">
+                          <h3 className="project-title">{selectedProject.title}</h3>
+                          <p className="project-description">{selectedProject.description}</p>
+                        </div>
                         <div className="project-header-actions">
                           <span className={`project-status ${getProjectStatus(selectedProject).toLowerCase().replace(' ', '-')}`}>
                             {getProjectStatus(selectedProject)}
                           </span>
-                          <button 
-                            className="refresh-docs-btn"
-                            onClick={refreshDocumentList}
-                            title="Refresh document list"
-                          >
-                            🔄 Refresh Documents
-                          </button>
                           {signedDocuments.length > 0 && (
                             <button 
                               className="view-signed-docs-btn"
@@ -3066,63 +4060,81 @@ function App() {
                               {(selectedPhaseForView && selectedPhaseForView !== 'all' ? phaseDocuments : projectDocuments.filter(doc => doc.phase === getCurrentActivePhase()?.phase_key)).map((doc, index) => (
                                   <div 
                                     key={doc.status_id || index} 
-                                    className={`document-item ${selectedDocument?.status_id === doc.status_id ? 'selected' : ''}`}
+                                    className={`document-card ${selectedDocument?.status_id === doc.status_id ? 'selected' : ''}`}
                                     onClick={() => handleDocumentSelect(doc)}
                                     style={{ cursor: 'pointer' }}
                                   >
-                                    <div className="document-info">
-                                      <span className="document-name">
-                                        {doc.activity_type}
-                                        {doc.activity_type?.includes('SIGNED') && (
-                                          <span className="signed-badge">✅ SIGNED</span>
-                                        )}
-                                      </span>
-                                    <span className="document-status">
-                                      {doc.phase ? `${doc.phase} - ` : ''}{doc.status}
-                                    </span>
-                                    {doc.status && (
-                                      <span className={`document-status-badge ${doc.status}`}>
-                                        {doc.status}
-                                      </span>
-                                    )}
+                                    <div className="card-header">
+                                      <div className="document-icon">
+                                        <FaFileContract />
+                                      </div>
+                                      <div className="document-info">
+                                        <h4 className="document-title">
+                                          {(() => {
+                                            // Shorten document names more aggressively
+                                            let name = doc.activity_type;
+                                            if (name?.includes('discovery_call_')) {
+                                              name = name.replace('discovery_call_', '');
+                                            }
+                                            if (name?.includes('Quadrant TJH SoW')) {
+                                              name = 'Quadrant TJH SoW';
+                                            }
+                                            if (name?.length > 20) {
+                                              name = name.substring(0, 17) + '...';
+                                            }
+                                            return name;
+                                          })()}
+                                        </h4>
+                                        <div className="document-meta">
+                                          <span className="document-type">SOW</span>
+                                          <span className="document-date">{new Date(doc.created_at).toLocaleDateString()}</span>
+                                        </div>
+                                      </div>
+                                      <div className="status-indicator">
+                                        {doc.status === 'in_progress' && <div className="status-dot in-progress"></div>}
+                                        {doc.status === 'completed' && <div className="status-dot completed"></div>}
+                                        {doc.status === 'pending' && <div className="status-dot pending"></div>}
+                                      </div>
                                     </div>
-                                  <div className="document-meta">
-                                    <span className="document-type">{(doc.activity_type || 'DOCUMENT').toUpperCase()}</span>
-                                    {doc.phase && (
-                                      <span className="document-phase">
-                                        {doc.phase === 'discovery_call' ? '🔍' : 
-                                         doc.phase === 'project_planning' ? '📋' : 
-                                         doc.phase === 'design_phase' ? '🎨' : 
-                                         doc.phase === 'closure' ? '🏁' : ''}
-                                      </span>
-                                    )}
-                                    <span className="document-date">{new Date(doc.created_at).toLocaleDateString()}</span>
-                                  </div>
-                                  <div className="document-actions">
-                                    <button 
-                                      className="download-document-btn"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (doc.location) {
-                                          window.open(doc.location, '_blank');
-                                        }
-                                      }}
-                                      title="Download document"
-                                    >
-                                      📥
-                                    </button>
-                                    <button 
-                                      className="sign-document-btn"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDocuSignPreview(doc);
-                                      }}
-                                      title="Sign document with DocuSign"
-                                      disabled={docusignLoading}
-                                    >
-                                      {docusignLoading ? '⏳' : '✍️'}
-                                    </button>
-                                  </div>
+                                    
+                                    <div className="card-footer">
+                                      <div className="phase-info">
+                                        <span className="phase-label">
+                                          {doc.phase === 'discovery_call' ? 'Discovery' : 
+                                           doc.phase === 'project_planning' ? 'Planning' : 
+                                           doc.phase === 'design_phase' ? 'Design' : 
+                                           doc.phase === 'closure' ? 'Closure' : 'Document'}
+                                        </span>
+                                        {doc.activity_type?.includes('SIGNED') && (
+                                          <span className="signed-indicator">✓ Signed</span>
+                                        )}
+                                      </div>
+                                      <div className="card-actions">
+                                        <button 
+                                          className="action-btn"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (doc.location) {
+                                              window.open(doc.location, '_blank');
+                                            }
+                                          }}
+                                          title="Download"
+                                        >
+                                          <FaDownload />
+                                        </button>
+                                        <button 
+                                          className="action-btn"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDocuSignPreview(doc);
+                                          }}
+                                          title="Sign"
+                                          disabled={docusignLoading}
+                                        >
+                                          {docusignLoading ? <FaSync className="spinning" /> : <FaFileContract />}
+                                        </button>
+                                      </div>
+                                    </div>
                                   </div>
                                 )) || (
                                 <div className="no-documents">
@@ -3327,7 +4339,9 @@ function App() {
                     </div>
                   ) : (
                     <div className="placeholder-message">
-                      <FaFolder />
+                      <div className="placeholder-icon">
+                        <FaFolder />
+                      </div>
                       <h3 className="placeholder-title">Select a project from the left pane to view details</h3>
                       <p className="placeholder-subtitle">Choose any project to see comprehensive information, timelines, and progress updates</p>
                     </div>
@@ -3626,189 +4640,266 @@ function App() {
           </div>
         )}
 
-        {/* Dashboard Popup */}
+        {/* Enhanced Analytics Dashboard */}
         {showDashboard && (
-          <div className="dashboard-overlay" onClick={() => setShowDashboard(false)}>
-            <div className="dashboard-popup" onClick={(e) => e.stopPropagation()}>
-              <div className="dashboard-header">
-                <div className="dashboard-header-left">
-                  <h2 className="dashboard-title">Dashboard</h2>
-                  <p className="dashboard-subtitle">Overview of your projects and activities</p>
+          <AnalyticsDashboard 
+            onClose={() => setShowDashboard(false)} 
+            navigationContext={showPortal ? 'portal' : 'chat'}
+          />
+        )}
+
+        {/* Archive Chats Popup */}
+        {showArchivePopup && (
+          <div className="archive-overlay" onClick={() => setShowArchivePopup(false)}>
+            <div className="archive-popup" onClick={(e) => e.stopPropagation()}>
+              <div className="archive-header">
+                <div className="archive-header-left">
+                  <h2 className="archive-title">Archive Chats</h2>
+                  <p className="archive-subtitle">Manage your archived conversations</p>
                 </div>
                 <button 
-                  className="dashboard-close-btn" 
-                  onClick={() => setShowDashboard(false)}
+                  className="archive-close-btn" 
+                  onClick={() => setShowArchivePopup(false)}
                 >
                   <FaTimes />
                 </button>
               </div>
               
-              <div className="dashboard-content">
-                {/* Stats Overview */}
-                <div className="dashboard-stats">
-                  <div className="stat-card">
-                    <div className="stat-icon">
-                      <FaProjectDiagram />
-                    </div>
-                    <div className="stat-content">
-                      <h3 className="stat-number">{projects.length}</h3>
-                      <p className="stat-label">
-                        {user?.tag?.toLowerCase() === 'admin' ? 'All Projects' : 'Your Projects'}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="stat-card">
-                    <div className="stat-icon">
-                      <FaUsers />
-                    </div>
-                    <div className="stat-content">
-                      <h3 className="stat-number">
-                        {projects.reduce((total, project) => 
-                          total + project.csaMembers.length + project.quadrantTeam.length + project.clientMembers.length, 0
-                        )}
-                      </h3>
-                      <p className="stat-label">Team Members</p>
-                    </div>
-                  </div>
-                  
-                  <div className="stat-card">
-                    <div className="stat-icon">
-                      <FaCalendarCheck />
-                    </div>
-                    <div className="stat-content">
-                      <h3 className="stat-number">
-                        {projects.filter(project => project.status === 'In Progress').length}
-                      </h3>
-                      <p className="stat-label">Active Projects</p>
-                    </div>
-                  </div>
-                  
-                  <div className="stat-card">
-                    <div className="stat-icon">
-                      <FaFileContract />
-                    </div>
-                    <div className="stat-content">
-                      <h3 className="stat-number">
-                        {projects.reduce((total, project) => 
-                          total + project.timeline.reduce((phaseTotal, phase) => 
-                            phaseTotal + phase.documents.length, 0
-                          ), 0
-                        )}
-                      </h3>
-                      <p className="stat-label">Documents</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Recent Activity */}
-                <div className="dashboard-section">
-                  <h3 className="section-title">Recent Activity</h3>
-                  <div className="activity-list">
-                    {projects.slice(0, 3).map((project) => (
-                      <div key={project.id} className="activity-item">
-                        <div className="activity-icon">
-                          <FaProjectDiagram />
+              <div className="archive-content">
+                {/* Active Chats Section */}
+                <div className="archive-section">
+                  <h3 className="section-title">Active Chats</h3>
+                  <div className="chat-list">
+                    {chats.filter(chat => chat.id !== 1).map((chat) => (
+                      <div key={chat.id} className="chat-item">
+                        <div className="chat-info">
+                          <div className="chat-avatar">{chat.avatar}</div>
+                          <div className="chat-details">
+                            <h4 className="chat-name">{chat.name}</h4>
+                            <p className="chat-preview">{chat.preview}</p>
+                            <span className="chat-time">
+                              {formatRelativeTime(new Date(chat.lastMessageTime || Date.now()))}
+                            </span>
+                          </div>
                         </div>
-                        <div className="activity-content">
-                          <h4 className="activity-title">{project.title}</h4>
-                          <p className="activity-description">
-                            Project {project.status.toLowerCase()} - {project.company}
-                          </p>
-                          <span className="activity-time">
-                            Started {new Date(project.startDate).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <div className="activity-status">
-                          <span className={`status-badge ${project.status.toLowerCase().replace(' ', '-')}`}>
-                            {project.status}
-                          </span>
-                        </div>
+                        <button 
+                          className="archive-btn"
+                          onClick={() => handleArchiveChat(chat.id)}
+                          title="Archive this chat"
+                        >
+                          <FaArchive />
+                        </button>
                       </div>
                     ))}
+                    {chats.filter(chat => chat.id !== 1).length === 0 && (
+                      <div className="empty-state">
+                        <FaArchive />
+                        <p>No active chats to archive</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Project Status Overview */}
-                <div className="dashboard-section">
-                  <h3 className="section-title">Project Status Overview</h3>
-                  <div className="status-overview">
-                    <div className="status-item">
-                      <div className="status-header">
-                        <span className="status-label">New</span>
-                        <span className="status-count">
-                          {projects.filter(p => getProjectStatus(p) === 'New').length}
-                        </span>
+                {/* Archived Chats Section */}
+                <div className="archive-section">
+                  <h3 className="section-title">Archived Chats</h3>
+                  <div className="chat-list">
+                    {isLoadingSessions ? (
+                      <div className="loading-state">
+                        <FaSync className="spinning" />
+                        <p>Loading archived chats...</p>
                       </div>
-                      <div className="status-bar">
-                        <div 
-                          className="status-fill new" 
-                          style={{width: `${(projects.filter(p => getProjectStatus(p) === 'New').length / projects.length) * 100}%`}}
-                        ></div>
+                    ) : archivedChats.length > 0 ? (
+                      archivedChats.map((chat) => (
+                        <div key={chat.id} className="chat-item archived">
+                          <div className="chat-info">
+                            <div className="chat-avatar">{chat.avatar}</div>
+                            <div className="chat-details">
+                              <h4 className="chat-name">{chat.name}</h4>
+                              <p className="chat-preview">{chat.preview}</p>
+                              <span className="chat-time">
+                                Archived {formatRelativeTime(new Date(chat.archived_at || Date.now()))}
+                              </span>
+                            </div>
+                          </div>
+                          <button 
+                            className="unarchive-btn"
+                            onClick={() => handleUnarchiveChat(chat)}
+                            title="Unarchive this chat"
+                          >
+                            <FaUndo />
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="empty-state">
+                        <FaArchive />
+                        <p>No archived chats</p>
                       </div>
-                    </div>
-                    
-                    <div className="status-item">
-                      <div className="status-header">
-                        <span className="status-label">In Progress</span>
-                        <span className="status-count">
-                          {projects.filter(p => getProjectStatus(p) === 'In Progress').length}
-                        </span>
-                      </div>
-                      <div className="status-bar">
-                        <div className="status-fill in-progress" 
-                          style={{width: `${(projects.filter(p => getProjectStatus(p) === 'In Progress').length / projects.length) * 100}%`}}
-                        ></div>
-                      </div>
-                    </div>
-                    
-                    <div className="status-item">
-                      <div className="status-header">
-                        <span className="status-label">Completed</span>
-                        <span className="status-count">
-                          {projects.filter(p => getProjectStatus(p) === 'Completed').length}
-                        </span>
-                      </div>
-                      <div className="status-bar">
-                        <div 
-                          className="status-fill completed" 
-                          style={{width: `${(projects.filter(p => getProjectStatus(p) === 'Completed').length / projects.length) * 100}%`}}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quick Actions */}
-                <div className="dashboard-section">
-                  <h3 className="section-title">Quick Actions</h3>
-                  <div className="quick-actions-grid">
-                                         <button className="quick-action-btn" onClick={() => {
-                       setShowDashboard(false);
-                       setShowNewProjectForm(true);
-                     }}>
-                       <FaPlusCircle />
-                       <span>Create New Project</span>
-                     </button>
-                     <button className="quick-action-btn" onClick={() => {
-                       setShowDashboard(false);
-                       handleOpenPortal();
-                     }}>
-                       <FaFolderOpen />
-                       <span>View All Projects</span>
-                     </button>
-                    <button className="quick-action-btn">
-                      <FaChartBar />
-                      <span>Generate Report</span>
-                    </button>
-                    <button className="quick-action-btn">
-                      <FaUsers />
-                      <span>Manage Team</span>
-                    </button>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Archive Confirmation Modal */}
+        {showArchiveConfirmation && chatToArchive && (
+          <div className="confirmation-overlay" onClick={cancelArchiveChat}>
+            <div className="confirmation-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="confirmation-header">
+                <h3 className="confirmation-title">Archive Chat</h3>
+                <button 
+                  className="confirmation-close-btn" 
+                  onClick={cancelArchiveChat}
+                >
+                  <FaTimes />
+                </button>
+              </div>
+              
+              <div className="confirmation-content">
+                <div className="confirmation-icon">
+                  <FaArchive />
+                </div>
+                <p className="confirmation-message">
+                  Are you sure you want to archive "{chatToArchive.name}"? 
+                  This chat will be moved to the archived section and can be unarchived later.
+                </p>
+                
+                <div className="confirmation-actions">
+                  <button 
+                    className="confirmation-btn cancel"
+                    onClick={cancelArchiveChat}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    className="confirmation-btn confirm"
+                    onClick={confirmArchiveChat}
+                  >
+                    <FaCheck />
+                    Archive Chat
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Projects Archive Popup */}
+        {showProjectsArchivePopup && (
+          <div className="projects-archive-overlay" onClick={() => setShowProjectsArchivePopup(false)}>
+            <div className="projects-archive-popup" onClick={(e) => e.stopPropagation()}>
+              <div className="projects-archive-header">
+                <div className="projects-archive-header-left">
+                  <FaFolder className="projects-archive-icon" />
+                  <div className="projects-archive-title-section">
+                    <h2 className="projects-archive-title">Projects Archive</h2>
+                    <p className="projects-archive-subtitle">Manage your archived projects</p>
+                  </div>
+                </div>
+                <button 
+                  className="projects-archive-close-btn" 
+                  onClick={() => setShowProjectsArchivePopup(false)}
+                >
+                  <FaTimes />
+                </button>
+              </div>
+              
+              <div className="projects-archive-content">
+                {/* File Management Style Header */}
+                <div className="projects-archive-toolbar">
+                  <div className="projects-archive-breadcrumb">
+                    <FaHome className="breadcrumb-icon" />
+                    <span className="breadcrumb-separator">/</span>
+                    <span className="breadcrumb-current">Archived Projects</span>
+                  </div>
+                  <div className="projects-archive-actions">
+                    <button className="projects-archive-action-btn" title="Refresh">
+                      <FaSyncAlt />
+                    </button>
+                    <button className="projects-archive-action-btn" title="Search">
+                      <FaSearch />
+                    </button>
+                    <button className="projects-archive-action-btn" title="View Options">
+                      <FaTh />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Projects Grid/List */}
+                <div className="projects-archive-grid">
+                  {archivedProjects.length > 0 ? (
+                    archivedProjects.map((project) => (
+                      <div key={project.id} className="archived-project-item">
+                        <div className="archived-project-icon">
+                          <FaFolderOpen />
+                        </div>
+                        <div className="archived-project-info">
+                          <h4 className="archived-project-name">{project.name}</h4>
+                          <p className="archived-project-description">{project.description}</p>
+                          <div className="archived-project-meta">
+                            <span className="archived-project-company">
+                              <FaBuilding /> {project.company}
+                            </span>
+                            <span className="archived-project-domain">
+                              <FaProjectDiagram /> {project.domain}
+                            </span>
+                            <span className="archived-project-date">
+                              <FaCalendarAlt /> {new Date(project.archivedDate).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="archived-project-actions">
+                          <button 
+                            className="archived-project-action-btn restore-btn" 
+                            title="Restore Project"
+                            onClick={() => handleRestoreProject(project.id)}
+                          >
+                            <FaUndo />
+                          </button>
+                          <button 
+                            className="archived-project-action-btn delete-btn" 
+                            title="Delete Permanently"
+                            onClick={() => handleDeleteProject(project.id)}
+                          >
+                            <FaTrash />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="projects-archive-empty">
+                      <FaFolderOpen className="empty-icon" />
+                      <h3 className="empty-title">No Archived Projects</h3>
+                      <p className="empty-description">
+                        Projects that you archive will appear here for easy management and recovery.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modern Notification */}
+        {notification && (
+          <div className={`notification ${notification.type}`}>
+            <div className="notification-content">
+              <span className="notification-icon">
+                {notification.type === 'success' ? <FaCheck /> : <FaTimes />}
+              </span>
+              <span className="notification-message">{notification.message}</span>
+            </div>
+            <button 
+              className="notification-close-btn" 
+              onClick={() => setNotification(null)}
+              title="Close notification"
+            >
+              <FaTimes />
+            </button>
           </div>
         )}
 
@@ -3895,6 +4986,240 @@ function App() {
                 >
                   Cancel
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Client Management Popup */}
+        {showClientManagement && (
+          <div className="client-management-overlay" onClick={() => setShowClientManagement(false)}>
+            <div className="client-management-popup" onClick={(e) => e.stopPropagation()}>
+              <div className="client-management-header">
+                <div className="client-management-header-left">
+                  <FaUsers className="client-management-icon" />
+                  <div className="client-management-title-section">
+                    <h2 className="client-management-title">Client Management</h2>
+                    <p className="client-management-subtitle">Manage your clients and their information</p>
+                  </div>
+                </div>
+                <button 
+                  className="client-management-close-btn" 
+                  onClick={() => setShowClientManagement(false)}
+                >
+                  <FaTimes />
+                </button>
+              </div>
+              
+              <div className="client-management-content">
+                <div className="client-management-toolbar">
+                  <button className="client-management-add-btn">
+                    <FaPlus />
+                    <span>Add New Client</span>
+                  </button>
+                  <div className="client-management-search">
+                    <FaSearch />
+                    <input 
+                      type="text" 
+                      placeholder="Search clients..." 
+                      className="client-management-search-input"
+                    />
+                  </div>
+                </div>
+                
+                <div className="client-management-table">
+                  <div className="table-header">
+                    <div className="table-header-cell">Company Name</div>
+                    <div className="table-header-cell">Contact Email</div>
+                    <div className="table-header-cell">Industry</div>
+                    <div className="table-header-cell">Active Projects</div>
+                    <div className="table-header-cell">Last Contact</div>
+                    <div className="table-header-cell">Status</div>
+                    <div className="table-header-cell">Actions</div>
+                  </div>
+                  
+                  <div className="table-body">
+                    <div className="table-row">
+                      <div className="table-cell">
+                        <div className="cell-content">
+                          <div className="client-avatar-small">
+                            <FaBuilding />
+                          </div>
+                          <span className="client-name">TechCorp Inc</span>
+                        </div>
+                      </div>
+                      <div className="table-cell">contact@techcorp.com</div>
+                      <div className="table-cell">Technology</div>
+                      <div className="table-cell">
+                        <span className="project-count">3</span>
+                      </div>
+                      <div className="table-cell">2 days ago</div>
+                      <div className="table-cell">
+                        <span className="status-badge active">Active</span>
+                      </div>
+                      <div className="table-cell">
+                        <div className="action-buttons">
+                          <button className="action-btn edit-btn" title="Edit Client">
+                            <FaCog />
+                          </button>
+                          <button className="action-btn delete-btn" title="Delete Client">
+                            <FaTrash />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="table-row">
+                      <div className="table-cell">
+                        <div className="cell-content">
+                          <div className="client-avatar-small">
+                            <FaBuilding />
+                          </div>
+                          <span className="client-name">Innovation Corp</span>
+                        </div>
+                      </div>
+                      <div className="table-cell">info@innovationcorp.com</div>
+                      <div className="table-cell">Consulting</div>
+                      <div className="table-cell">
+                        <span className="project-count">1</span>
+                      </div>
+                      <div className="table-cell">1 week ago</div>
+                      <div className="table-cell">
+                        <span className="status-badge active">Active</span>
+                      </div>
+                      <div className="table-cell">
+                        <div className="action-buttons">
+                          <button className="action-btn edit-btn" title="Edit Client">
+                            <FaCog />
+                          </button>
+                          <button className="action-btn delete-btn" title="Delete Client">
+                            <FaTrash />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="table-row">
+                      <div className="table-cell">
+                        <div className="cell-content">
+                          <div className="client-avatar-small">
+                            <FaBuilding />
+                          </div>
+                          <span className="client-name">Hollister</span>
+                        </div>
+                      </div>
+                      <div className="table-cell">business@hollister.com</div>
+                      <div className="table-cell">Retail</div>
+                      <div className="table-cell">
+                        <span className="project-count">1</span>
+                      </div>
+                      <div className="table-cell">3 days ago</div>
+                      <div className="table-cell">
+                        <span className="status-badge pending">Pending</span>
+                      </div>
+                      <div className="table-cell">
+                        <div className="action-buttons">
+                          <button className="action-btn edit-btn" title="Edit Client">
+                            <FaCog />
+                          </button>
+                          <button className="action-btn delete-btn" title="Delete Client">
+                            <FaTrash />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="table-row">
+                      <div className="table-cell">
+                        <div className="cell-content">
+                          <div className="client-avatar-small">
+                            <FaBuilding />
+                          </div>
+                          <span className="client-name">Global Solutions Ltd</span>
+                        </div>
+                      </div>
+                      <div className="table-cell">contact@globalsolutions.com</div>
+                      <div className="table-cell">Manufacturing</div>
+                      <div className="table-cell">
+                        <span className="project-count">5</span>
+                      </div>
+                      <div className="table-cell">1 day ago</div>
+                      <div className="table-cell">
+                        <span className="status-badge active">Active</span>
+                      </div>
+                      <div className="table-cell">
+                        <div className="action-buttons">
+                          <button className="action-btn edit-btn" title="Edit Client">
+                            <FaCog />
+                          </button>
+                          <button className="action-btn delete-btn" title="Delete Client">
+                            <FaTrash />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="table-row">
+                      <div className="table-cell">
+                        <div className="cell-content">
+                          <div className="client-avatar-small">
+                            <FaBuilding />
+                          </div>
+                          <span className="client-name">StartupXYZ</span>
+                        </div>
+                      </div>
+                      <div className="table-cell">hello@startupxyz.com</div>
+                      <div className="table-cell">Fintech</div>
+                      <div className="table-cell">
+                        <span className="project-count">0</span>
+                      </div>
+                      <div className="table-cell">2 weeks ago</div>
+                      <div className="table-cell">
+                        <span className="status-badge inactive">Inactive</span>
+                      </div>
+                      <div className="table-cell">
+                        <div className="action-buttons">
+                          <button className="action-btn edit-btn" title="Edit Client">
+                            <FaCog />
+                          </button>
+                          <button className="action-btn delete-btn" title="Delete Client">
+                            <FaTrash />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="table-row">
+                      <div className="table-cell">
+                        <div className="cell-content">
+                          <div className="client-avatar-small">
+                            <FaBuilding />
+                          </div>
+                          <span className="client-name">Enterprise Systems</span>
+                        </div>
+                      </div>
+                      <div className="table-cell">admin@enterprisesys.com</div>
+                      <div className="table-cell">Software</div>
+                      <div className="table-cell">
+                        <span className="project-count">2</span>
+                      </div>
+                      <div className="table-cell">5 days ago</div>
+                      <div className="table-cell">
+                        <span className="status-badge active">Active</span>
+                      </div>
+                      <div className="table-cell">
+                        <div className="action-buttons">
+                          <button className="action-btn edit-btn" title="Edit Client">
+                            <FaCog />
+                          </button>
+                          <button className="action-btn delete-btn" title="Delete Client">
+                            <FaTrash />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
